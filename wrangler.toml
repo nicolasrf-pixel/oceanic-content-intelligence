@@ -1,26 +1,35 @@
-name = "oceanic-content-intelligence-api"
-main = "worker/index.ts"
-compatibility_date = "2026-11-20"
+name = "oceanic-content-intelligence"
+main = "src/index.ts"
+compatibility_date = "2025-11-01"
 workers_dev = true
 
+# Frontend (React/Vite) compilado en web/dist y servido por el mismo Worker.
 [assets]
-directory = "./public"
+directory = "./web/dist"
 binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
 
 [vars]
 ENVIRONMENT = "production"
+AI_PROVIDER = "anthropic"          # anthropic | openai (compatible con /chat/completions)
+AI_MODEL = "claude-sonnet-5-5"
+# AI_BASE_URL = "https://api.openai.com/v1"   # solo para AI_PROVIDER=openai u otro compatible
+ADMIN_EMAIL = "editor@oceanic.cl"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "oceanic-content-intelligence"
+database_name = "oceanic-content-db"
 database_id = "REPLACE_WITH_D1_DATABASE_ID"
-migrations_dir = "worker/migrations"
+migrations_dir = "migrations"
 
 [[r2_buckets]]
 binding = "MEDIA"
 bucket_name = "oceanic-content-media"
 
+# Corre cada hora; el Worker decide si toca ejecutar segun la hora local de Santiago
+# configurada en Ajustes (monitoring_hours_local). Asi el horario respeta el cambio de hora de Chile.
 [triggers]
-# Daily at 11:00 UTC = 08:00 in Santiago during Chilean summer time.
-# Revisit DST offset before production scheduling.
-crons = ["0 11 * * *"]
+crons = ["0 * * * *"]
+
+# Secretos (NO van aqui): wrangler secret put ADMIN_AUTH_SECRET | AI_API_KEY | META_ACCESS_TOKEN | META_IG_USER_ID

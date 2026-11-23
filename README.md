@@ -1,70 +1,76 @@
-# Oceanic Content Intelligence — MVP 0.1
+# Oceanic Content Intelligence 1.0
 
-Aplicación editorial para monitorear fuentes de marcas náuticas, preparar adaptaciones locales y dejar la decisión de publicación en manos del editor.
-
-## Qué incluye esta entrega
-
-- Panel web responsive en español.
-- Bandeja editorial con tarjetas, puntuación, clasificación y motivo de recomendación.
-- Acciones funcionales locales: aprobar, descartar, editar copy y consultar biblioteca.
-- Marcas piloto: Beneteau Vela, Beneteau Power, Lagoon y Axopar. Beneteau comparte una cuenta, pero conserva dos perfiles editoriales.
-- Persistencia de demostración mediante `localStorage`.
-- Worker API inicial con endpoints de salud, marcas, contenidos y cambio de estado.
-- Esquema D1 y bucket R2 configurables.
-- Cron Trigger diario como andamiaje, deliberadamente bloqueado mientras no haya conectores autorizados.
-
-**Importante:** los cuatro contenidos precargados son datos ficticios de demostración. No se han extraído de Instagram ni Facebook. La versión actual no realiza scraping, no descarga medios y no publica en redes.
+Sistema editorial que monitorea fuentes de marcas náuticas, analiza cada publicación, la adapta al español de Chile y la deja lista para que una persona decida. **Nada se publica sin aprobación humana**: el sistema no tiene ninguna función de publicación en redes.
 
 ## Arquitectura
 
-- Aplicación full-stack: Cloudflare Workers con Static Assets (frontend servido desde el mismo Worker).
-- API: rutas `/api/*` en Cloudflare Workers.
-- Datos: Cloudflare D1.
-- Medios: Cloudflare R2 (solo material con autorización de uso).
-- Programación: Cloudflare Cron Triggers.
-- IA: adaptador de proveedor pendiente de definir y configurar como secreto del Worker.
+| Capa | Tecnología |
+|---|---|
+| Frontend | React + Vite + TypeScript (`web/`), servido por el mismo Worker (Static Assets) |
+| API | Cloudflare Worker en TypeScript (`src/`), 100 % bajo `/api/*` |
+| Datos | Cloudflare D1 (`migrations/`) |
+| Medios propios | Cloudflare R2, solo con confirmación de derechos |
+| Automatización | Cron Trigger horario; el Worker decide si toca correr según la hora de Santiago configurada |
+| IA | Anthropic u OpenAI-compatible; sin `AI_API_KEY` funciona en modo heurístico |
 
-Se eligió frontend estático en esta primera entrega para evitar complejidad y costos de build innecesarios. Se puede migrar a React si el producto crece.
+### Agentes (`src/agents/`)
+- **Scout**: separa publicaciones nuevas de duplicadas (id externo, URL canónica y hash de contenido, incluso entre cuentas).
+- **Curador**: clasifica en 6 categorías (lanzamiento, producto, evento, estilo de vida, tecnología, corporativo), puntúa 0–100 con explicación, descarta lo irrelevante y reparte cuentas compartidas (Beneteau Vela/Power).
+- **Copywriter**: adapta a español de Chile (tuteo, sin voseo/argentinismos/españolismos), conserva el tono, no inventa datos.
+- **Editor**: controles deterministas (voseo, vosotros, léxico, cifras que no están en el original, largo) + revisión por IA de ortografía, gramática, coherencia y exactitud. Una cifra inventada o un voseo bloquean.
+- **Coordinador**: orquesta el flujo, candado contra ejecuciones simultáneas, reintentos con backoff, límites por cuenta y por ejecución.
 
-## Probar localmente
+### Modo sin IA (honesto)
+Sin `AI_API_KEY` el Curador puntúa por reglas y el Copywriter solo ajusta tuteo/léxico **si el original ya está en español**. Si está en inglés o francés **no traduce ni inventa**: deja el copy marcado «PENDIENTE DE ADAPTACIÓN CON IA» y no permite aprobarlo. Al configurar la IA, «Reprocesar con IA» (Monitor de marcas) rehace esos copies.
 
-Abre `public/index.html` directamente en un navegador o sirve la carpeta `public` con un servidor estático. La experiencia de demostración funciona sin backend.
+### Conectores (`src/connectors/`)
+- `html_news`: sitios públicos de noticias; respeta `robots.txt`, valida SSRF, filtra páginas de sección y toma imagen/fecha.
+- `rss`: feeds RSS/Atom.
+- `instagram_discovery`: Instagram Business Discovery con una cuenta profesional propia autorizada (`META_ACCESS_TOKEN`, `META_IG_USER_ID`). Sin credenciales queda «Requiere credenciales»; **no se hace scraping de Instagram**.
+- Manual: URL o texto pegado desde la app. Los enlaces a redes sociales exigen pegar el texto.
 
-## Desplegar en Cloudflare Workers
+## Puesta en marcha
 
-1. Crea un repositorio Git y sube el contenido de esta carpeta.
-2. Instala Node.js LTS.
-3. Ejecuta `npm install`.
-4. Crea D1: `npm run db:create`.
-5. Copia el `database_id` devuelto a `wrangler.toml`.
-6. Crea el bucket R2 `oceanic-content-media`.
-7. Crea el bucket: `npx wrangler r2 bucket create oceanic-content-media`.
-8. Aplica migraciones: `npm run db:migrate`.
-9. Inserta marcas y fuentes piloto: `npm run db:seed`.
-10. Despliega frontend y API juntos: `npm run deploy`.
+Requiere Node 20+ y una cuenta Cloudflare con `wrangler login` (o `CLOUDFLARE_API_TOKEN`).
 
-La configuración usa Workers Static Assets para servir `public/` y resolver `/api/*` desde el Worker. Cloudflare recomienda Workers para proyectos nuevos con assets estáticos y backend integrado.
+```bash
+npm install
+npx wrangler d1 create oceanic-content-db        # copia database_id a wrangler.toml
+npx wrangler r2 bucket create oceanic-content-media
+npm run db:migrate:remote
+npm run db:seed:remote
+npm run deploy
+curl https://<tu-worker>.workers.dev/api/health
+```
 
-## Configurar recursos del Worker
+### Secretos (nunca en el repositorio ni por chat)
+```bash
+npx wrangler secret put ADMIN_AUTH_SECRET   # clave de acceso del editor (≥12 caracteres); también firma las sesiones
+npx wrangler secret put AI_API_KEY          # clave del proveedor de IA
+npx wrangler secret put META_ACCESS_TOKEN   # opcional (Instagram)
+npx wrangler secret put META_IG_USER_ID     # opcional (Instagram)
+```
+Variables no secretas en `wrangler.toml`: `AI_PROVIDER` (`anthropic` | `openai`), `AI_MODEL`, `AI_BASE_URL` (solo OpenAI-compatible), `ADMIN_EMAIL`.
 
-Crea el bucket R2 con el nombre configurado en `wrangler.toml`.
+### Desarrollo local
+```bash
+cp .dev.vars.example .dev.vars   # edita ADMIN_AUTH_SECRET y agrega ENVIRONMENT=development
+npm run db:migrate:local && npm run db:seed:local
+npm run build && npm run dev     # http://localhost:8787
+npm test                         # pruebas unitarias
+```
 
-Antes de producción, restringe CORS al dominio real de la aplicación, añade autenticación, rate limiting y secretos mediante `wrangler secret put`.
+## Seguridad
+- Sesión JWT HS256 en cookie `HttpOnly; Secure; SameSite=Strict` (o `Authorization: Bearer`); expira en 12 h. Cabecera `X-Requested-With` obligatoria en mutaciones (defensa CSRF). Bloqueo tras 5 intentos fallidos en 15 min por IP.
+- Todos los endpoints salvo `/api/health` y el login exigen sesión.
+- Consultas D1 siempre con parámetros; sin concatenar entrada de usuario en SQL.
+- SSRF: solo `https`, sin credenciales ni puertos, sin IPs ni hosts internos, redirecciones revalidadas (máx. 3), lista de dominios permitidos por fuente, tope de 2 MB y 10 s.
+- `robots.txt` respetado (4xx = permitido, 5xx/red = denegado).
+- Texto de las publicaciones se entrega a la IA como dato no confiable (anti prompt-injection) y la salida se valida (categorías, puntaje, cifras).
+- Cabeceras CSP, `X-Frame-Options`, `nosniff`. Subidas a R2: tipos y tamaño limitados (25 MB) y confirmación explícita de derechos.
+- Los secretos no se registran en logs.
 
-## Poblar marcas
+## API (resumen)
+`POST /api/auth/login` · `GET /api/health` · `GET /api/dashboard` · `GET /api/publications` (filtros: `brand, category, status, priority, from, to, q, sort`) · `GET /api/publications/:id` · `POST /api/publications/:id/action` (`approve|discard|save|reset`) · `PUT /api/publications/:id/copy` · `POST /api/publications/:id/regenerate` · `POST /api/publications/:id/media` · `POST /api/publications/manual` · `GET /api/library` · `GET|POST|PUT|DELETE /api/calendar` · `GET|POST|PUT /api/brands`, `/api/accounts` · `POST /api/monitor/run` · `POST /api/monitor/reprocess` · `GET /api/logs?type=monitoring|agents|audit` · `GET|PUT /api/settings`.
 
-La migración crea las tablas. Inserta las marcas iniciales con SQL (ver `docs/seed.sql`) después de aplicar la migración.
-
-## Fuentes y permisos
-
-La arquitectura híbrida no equivale a scraping indiscriminado. Instagram/Meta limita el acceso a datos de cuentas ajenas; los endpoints de Instagram Graph API normalmente se centran en cuentas profesionales autorizadas y permisos concretos. Antes de activar un adaptador hay que validar la elegibilidad de la cuenta, permisos, términos, derechos de reutilización de imágenes/videos y disponibilidad técnica. Si no existe acceso autorizado, se conserva el enlace original y se usa revisión asistida.
-
-## Próximos hitos
-
-1. Añadir autenticación de editor.
-2. Crear adaptadores por fuente: Meta API si aplica, páginas oficiales/RSS/newsroom, y revisión asistida de URLs.
-3. Normalizar publicaciones y deduplicar por URL/ID.
-4. Integrar IA para clasificación y adaptación de copy con guía de tono de Oceanic.
-5. Sustituir el modo local por API D1.
-6. Activar Cron únicamente cuando los conectores estén probados y autorizados.
-7. Añadir flujo de permisos de medios y luego programación Meta.
+Estado de avance y pendientes: ver `IMPLEMENTATION_STATUS.md`.
