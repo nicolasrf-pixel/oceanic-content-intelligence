@@ -20,7 +20,7 @@ ADMIN_EMAIL = "editor@oceanic.cl"
 [[d1_databases]]
 binding = "DB"
 database_name = "oceanic-content-db"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "5ca03ed6-a548-4f40-bbd3-088305252414"
 migrations_dir = "migrations"
 
 [[r2_buckets]]
