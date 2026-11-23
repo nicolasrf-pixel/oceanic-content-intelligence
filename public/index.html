@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#071d2b" />
+  <title>Oceanic Content Intelligence</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="#dashboard" aria-label="Oceanic Content Intelligence">
+        <span class="brand-mark">O</span><span class="brand-name">OCEANIC<span>CONTENT INTELLIGENCE</span></span>
+      </a>
+      <div class="workspace-label">WORKSPACE</div>
+      <nav class="nav">
+        <button class="nav-item active" data-view="dashboard"><span>▦</span> Resumen</button>
+        <button class="nav-item" data-view="inbox"><span>◫</span> Bandeja editorial <b class="nav-count" id="pendingCount">4</b></button>
+        <button class="nav-item" data-view="approved"><span>✓</span> Aprobados</button>
+        <button class="nav-item" data-view="calendar"><span>▦</span> Calendario</button>
+        <button class="nav-item" data-view="library"><span>▤</span> Biblioteca</button>
+      </nav>
+      <div class="sidebar-divider"></div>
+      <div class="workspace-label">CONFIGURACIÓN</div>
+      <nav class="nav">
+        <button class="nav-item" data-view="brands"><span>◎</span> Marcas y fuentes</button>
+        <button class="nav-item" data-view="settings"><span>⚙</span> Ajustes</button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="connection"><span class="status-dot"></span><span><strong>Modo demostración</strong><small>Datos locales en este navegador</small></span></div>
+        <div class="user"><div class="avatar">N</div><span><strong>Editor Oceanic</strong><small>Administrador</small></span><span class="more">···</span></div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <button class="mobile-menu" id="mobileMenu" aria-label="Abrir menú">☰</button>
+        <div class="breadcrumbs">Oceanic <span>/</span> <strong id="breadcrumb">Resumen</strong></div>
+        <div class="top-actions"><span class="today" id="today"></span><button class="icon-button" title="Notificaciones">♧</button><div class="avatar small">N</div></div>
+      </header>
+      <section class="page" id="page"></section>
+      <footer class="footer"><span>OCEANIC CONTENT INTELLIGENCE</span><span>EDITORIAL INTELLIGENCE · MVP 0.1</span></footer>
+    </main>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <dialog id="postDialog" class="post-dialog">
+    <form method="dialog" class="dialog-head"><div><span class="eyebrow">REVISIÓN EDITORIAL</span><h2 id="dialogTitle">Editar contenido</h2></div><button class="icon-button" value="cancel" aria-label="Cerrar">×</button></form>
+    <div id="dialogBody" class="dialog-body"></div>
+  </dialog>
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+{
+  "name": "oceanic-content-intelligence",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:create": "wrangler d1 create oceanic-content-intelligence",
+    "db:migrate": "wrangler d1 migrations apply oceanic-content-intelligence --remote",
+    "db:seed": "wrangler d1 execute oceanic-content-intelligence --remote --file=docs/seed.sql"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20261120.0",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.50.0"
+  }
+}

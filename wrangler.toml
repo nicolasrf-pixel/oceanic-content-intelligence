@@ -1,0 +1,26 @@
+name = "oceanic-content-intelligence-api"
+main = "worker/index.ts"
+compatibility_date = "2026-11-20"
+workers_dev = true
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+[vars]
+ENVIRONMENT = "production"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "oceanic-content-intelligence"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "worker/migrations"
+
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "oceanic-content-media"
+
+[triggers]
+# Daily at 11:00 UTC = 08:00 in Santiago during Chilean summer time.
+# Revisit DST offset before production scheduling.
+crons = ["0 11 * * *"]
