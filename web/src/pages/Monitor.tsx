@@ -59,7 +59,7 @@ export function Monitor() {
       <div className="title-row"><div><span className="eyebrow">FUENTES</span><h1>Monitor de marcas</h1><p className="muted">Activa o desactiva marcas y fuentes, configura URLs y revisa el estado de cada conector.</p></div>
         <div className="actions wrap"><button className="btn" onClick={() => setNewBrand('')}>+ Marca</button>
           <button className="btn" disabled={!!busy} onClick={() => run('re', '/monitor/reprocess', { scope: 'heuristic', limit: 10 }, (r) => `Reprocesadas ${r.processed} (${r.aiMode === 'ia' ? 'con IA' : 'sin IA'})${r.errors ? `, ${r.errors} con error` : ''}`)}>{busy === 're' ? 'Reprocesando…' : '↻ Reprocesar con IA'}</button>
-          <button className="btn primary" disabled={!!busy} onClick={() => run('run', '/monitor/run', {}, (r) => r.status === 'locked' ? 'Ya hay una ejecución en curso' : `${r.created} nuevas, ${r.duplicates} duplicadas, ${r.errors} errores`)}>{busy === 'run' ? 'Ejecutando…' : '▶ Ejecutar monitoreo ahora'}</button></div></div>
+          <button className="btn primary" disabled={!!busy} onClick={() => run('run', '/monitor/run', {}, (r) => r.status === 'locked' ? 'Ya hay una ejecución en curso' : `${r.created} nuevas, ${r.duplicates} duplicadas, ${r.errors} errores${r.budgetCut ? '. Se alcanzó el límite del plan: el resto se procesa solo en las próximas horas.' : ''}`)}>{busy === 'run' ? 'Ejecutando…' : '▶ Ejecutar monitoreo ahora'}</button></div></div>
       {!data.instagramConfigured && <p className="alert info">Instagram aún no está conectado: faltan <code>META_ACCESS_TOKEN</code> y <code>META_IG_USER_ID</code> (cuenta profesional autorizada). Mientras tanto esas fuentes quedan en espera y no se hace scraping.</p>}
 
       {data.brands.map((b: any) => (

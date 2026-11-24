@@ -21,6 +21,12 @@
 - **Sin lectura automática posible:** Solaris (CAPTCHA), Saffier (desafío anti-bot, sus noticias no aparecen como enlaces), XO Boats, VX One, Switch One Design (sin sección de noticias legible). Quedan desactivadas o solo con Instagram/YouTube.
 - YouTube: canales resueltos para 9 marcas (falta Solaris); conector con API oficial listo, en espera de `YOUTUBE_API_KEY`.
 
+## Verificado en producción (cron 01:00, 2026-11-24)
+- Lagoon: 5 artículos leídos mediante el lector. Workers AI: 5 copies en español de Chile con traducción de referencia; el Editor marcó exageraciones del modelo.
+- **Límite del plan gratuito de Workers:** 50 subsolicitudes por ejecución (D1, fetch y IA cuentan). 10 de 17 llamadas de IA fallaron con «Too many subrequests» y cayeron a modo heurístico.
+- Respuesta: presupuesto por ejecución (`SUBREQUEST_BUDGET`, 45 en plan gratuito; subir a 900 con plan de pago). Si no alcanza, lo pendiente queda en estado «new» y se retoma en el siguiente cron horario; las fuentes se revisan de la menos reciente a la más reciente, y el cron horario retoma las que llevan más de 20 h sin revisar y rehace copies sin IA. Con el plan gratuito el sistema converge, pero lento (≈1–2 publicaciones por hora).
+- Hashtags ahora deterministas (el modelo cometía errores de tipeo) y prompt más estricto contra adjetivos/afirmaciones que el original no dice.
+
 ## NO verificado todavía
 - Despliegue real en Cloudflare (D1/R2 remotos, cron en producción).
 - Llamadas a un proveedor de IA real (solo probado con API simulada). Los copies reales en español de Chile deben revisarse con el usuario.

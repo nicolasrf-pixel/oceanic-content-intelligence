@@ -28,11 +28,15 @@ export default {
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil((async () => {
       const s = await getSettings(env);
-      if (s.monitoring_enabled !== '1' || !shouldRunNow(s.monitoring_hours_local)) return;
-      await runMonitoring(env, { trigger: 'cron' });
-      // Si hay IA disponible, rehace lo que quedó con copy heurístico o sin procesar (nunca toca copies editados a mano).
+      if (s.monitoring_enabled !== '1') return;
+      // En la hora programada revisa todas las fuentes; en las demás horas solo retoma las que quedaron pendientes
+      // (el plan gratuito de Workers limita las operaciones por ejecución) y rehace lo que quedó sin IA.
+      await runMonitoring(env, { trigger: 'cron', dueOnly: !shouldRunNow(s.monitoring_hours_local) });
       let llm = null; try { llm = getLlm(env); } catch { /* sin IA */ }
-      if (llm) { await reprocess(env, { scope: 'failed', limit: 10 }); await reprocess(env, { scope: 'heuristic', limit: 10 }); }
+      if (llm) {
+        await reprocess(env, { scope: 'failed', limit: 10, keepBudget: true });
+        await reprocess(env, { scope: 'heuristic', limit: 10, keepBudget: true });
+      }
     })());
   },
 } satisfies ExportedHandler<Env>;

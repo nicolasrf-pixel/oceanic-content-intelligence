@@ -10,7 +10,8 @@ export const TONE_RULES = `Reglas de español de Chile:
 - Tuteo ("tú", "descubre", "conoce", "vive"). PROHIBIDO el voseo (tenés, mirá, descubrí, vos) y el vosotros de España (vuestro, habéis).
 - Sin argentinismos ni espanolismos (usa "auto", "celular", "computador", "bacán" solo si encaja con el tono).
 - Mantén el tono y la intención del original (aspiracional, técnico, familiar, etc.).
-- NO inventes datos: ni cifras, ni medidas, ni precios, ni fechas, ni nombres de modelos que no estén en el original.
+- NO inventes datos: ni cifras, ni medidas, ni precios, ni fechas, ni nombres de modelos o de personas que no estén en el original.
+- NO agregues promesas ni adjetivos que el original no use ("inolvidable", "perfecto", "exclusivo"). Cíñete a lo que el original afirma.
 - Vocabulario náutico correcto (eslora, manga, calado, fueraborda, catamarán, velero, lancha).
 - Largo ideal 300-900 caracteres, máx. 2.200. Máximo 4 emojis. Termina con una invitación sutil a conocer más; no publiques enlaces inventados.`;
 
@@ -24,10 +25,14 @@ function excerpt(text: string, max = 700): string {
   return (i > 200 ? cut.slice(0, i + 1) : cut.slice(0, cut.lastIndexOf(' ')) + '…');
 }
 
+export function defaultHashtags(brandName: string, category: string | null): string[] {
+  return [hashtagFor(brandName), ...(TAGS[category ?? ''] ?? ['#Náutica']), '#Oceanic'];
+}
+
 /** Modo sin IA: solo ajusta el español existente a tuteo chileno. Si el original no está en español NO traduce ni inventa. */
 export function heuristicDraft(pub: Pick<PubRow, 'title' | 'original_text'>, brand: Pick<BrandRow, 'name'>, category: string | null): Draft {
   const lang = detectLang(pub.original_text);
-  const tags = [hashtagFor(brand.name), ...(TAGS[category ?? ''] ?? ['#Náutica']), '#Oceanic'];
+  const tags = defaultHashtags(brand.name, category);
   if (lang === 'es') {
     return { copy: neutralizeLexicon(toTuteo(excerpt(pub.original_text))), hashtags: tags, provider: 'heuristic', model: null, needsAi: false, source: 'heuristic' };
   }
@@ -56,7 +61,7 @@ ${pub.title ? 'Título: ' + pub.title + '\n' : ''}${pub.original_text.slice(0, 3
       const j = parseJsonLoose<any>(r.text);
       const copy = String(j.copy ?? '').trim();
       if (copy.length < 20) throw new Error('Copy vacío');
-      const hashtags = (Array.isArray(j.hashtags) ? j.hashtags : []).map((h: any) => '#' + String(h).replace(/^#/, '').replace(/\s+/g, '')).filter((h: string) => h.length > 1).slice(0, 8);
+      const hashtags = defaultHashtags(brand.name, o.category ?? null);   // deterministas: el modelo suele cometer errores de tipeo
       await logAgent(ctx.env, { runId: ctx.runId, publicationId: pub.id, agent: 'copywriter', status: 'ok', provider: ctx.llm.provider, model: ctx.llm.model, inputTokens: r.inputTokens, outputTokens: r.outputTokens, durationMs: Date.now() - t0 });
       return { copy, hashtags, provider: ctx.llm.provider, model: ctx.llm.model, needsAi: false, source: 'ai' };
     } catch (e) {

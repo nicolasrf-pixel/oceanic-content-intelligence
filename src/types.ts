@@ -11,6 +11,7 @@ export interface Env {
   META_ACCESS_TOKEN?: string;
   META_IG_USER_ID?: string;
   YOUTUBE_API_KEY?: string;
+  SUBREQUEST_BUDGET?: string;   // 45 en plan gratuito; 900 en plan de pago
   AI?: Ai;                      // Workers AI (sin clave externa)
   WORKERS_AI_MODEL?: string;
   ENVIRONMENT?: string;

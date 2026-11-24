@@ -1,4 +1,5 @@
 import { HttpError, RetryableError } from './util';
+import { spend } from './budget';
 
 export const BOT_UA = 'OceanicContentBot/1.0 (monitoreo editorial; respeta robots.txt)';
 const MAX_REDIRECTS = 3;
@@ -39,6 +40,7 @@ export async function safeFetch(
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     if (o.allowedHosts && !hostAllowed(url, o.allowedHosts)) throw new HttpError(400, `Dominio fuera de la lista permitida: ${url.hostname}`, 'ssrf_blocked');
     let res: Response;
+    spend();
     try {
       res = await fetch(url.toString(), {
         redirect: 'manual',

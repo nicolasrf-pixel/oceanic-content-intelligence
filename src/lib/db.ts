@@ -1,11 +1,15 @@
 import type { Env } from '../types';
+import { spend } from './budget';
 export async function q<T = any>(env: Env, sql: string, ...b: unknown[]): Promise<T[]> {
+  spend();
   return (await env.DB.prepare(sql).bind(...b).all<T>()).results;
 }
 export async function one<T = any>(env: Env, sql: string, ...b: unknown[]): Promise<T | null> {
+  spend();
   return env.DB.prepare(sql).bind(...b).first<T>();
 }
 export async function exec(env: Env, sql: string, ...b: unknown[]) {
+  spend();
   return env.DB.prepare(sql).bind(...b).run();
 }
 

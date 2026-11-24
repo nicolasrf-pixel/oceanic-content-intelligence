@@ -1,6 +1,7 @@
 import type { SourceConnector } from './types';
 import type { RawItem } from '../types';
 import { RetryableError, canonicalUrl, withRetry } from '../lib/util';
+import { spend } from '../lib/budget';
 
 /**
  * YouTube Data API v3 (oficial, cuota gratuita). Los feeds RSS de YouTube NO se usan porque su robots.txt los prohíbe.
@@ -17,6 +18,7 @@ export const youtubeConnector: SourceConnector = {
     const url = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&maxResults=${Math.min(ctx.maxItems * 3, 25)}&playlistId=${playlist}`;
     const res = await withRetry(async () => {
       let r: Response;
+      spend();
       try { r = await fetch(url, { headers: { 'x-goog-api-key': key }, signal: AbortSignal.timeout(12_000) }); } catch (e) { throw new RetryableError((e as Error).message); }
       if (r.status === 429 || r.status >= 500) throw new RetryableError(`YouTube API HTTP ${r.status}`);
       return { status: r.status, body: (await r.json().catch(() => ({}))) as any };

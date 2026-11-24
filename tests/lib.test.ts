@@ -226,3 +226,15 @@ describe('conector YouTube (API oficial)', () => {
     expect(r.items[0]).toMatchObject({ url: 'https://www.youtube.com/watch?v=abc123', mediaType: 'video', mediaUrl: 'https://i.ytimg.com/a.jpg' });
   });
 });
+
+import { COST, remaining, resetBudget, spend } from '../src/lib/budget';
+describe('presupuesto de subsolicitudes (plan gratuito)', () => {
+  it('descuenta y respeta el límite configurado', () => {
+    resetBudget('45'); expect(remaining()).toBe(45);
+    spend(); spend(10); expect(remaining()).toBe(34);
+    resetBudget('900'); expect(remaining()).toBe(900);
+    resetBudget(undefined); expect(remaining()).toBe(45);
+    resetBudget('3'); expect(remaining()).toBe(45);   // valores absurdos caen al mínimo seguro
+  });
+  it('una publicación completa cabe en una ejecución del plan gratuito', () => { expect(COST.publication + COST.account).toBeLessThan(45); });
+});

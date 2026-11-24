@@ -1,5 +1,6 @@
 import type { Env } from '../types';
 import { RetryableError, withRetry } from '../lib/util';
+import { spend } from '../lib/budget';
 
 export interface LlmResult { text: string; inputTokens?: number; outputTokens?: number }
 export interface LlmClient {
@@ -17,6 +18,7 @@ function workersAi(env: Env): LlmClient {
     provider: 'workers-ai', model,
     complete: (system, user, o) => withRetry(async () => {
       try {
+        spend();
         const r: any = await (env.AI as any).run(model, { messages: [{ role: 'system', content: system }, { role: 'user', content: user }], max_tokens: o?.maxTokens ?? 1500, temperature: 0.3 });
         const out = r?.response ?? r?.result?.response ?? '';
         const text = typeof out === 'string' ? out : JSON.stringify(out);
@@ -62,6 +64,7 @@ export function getLlm(env: Env): LlmClient | null {
 
 async function post(url: string, headers: Record<string, string>, body: unknown): Promise<any> {
   let res: Response;
+  spend();
   try {
     res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body), signal: AbortSignal.timeout(60_000) });
   } catch (e) { throw new RetryableError(`IA: error de red (${(e as Error).message})`); }

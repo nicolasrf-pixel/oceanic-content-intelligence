@@ -1,6 +1,7 @@
 import type { SourceConnector } from './types';
 import type { RawItem } from '../types';
 import { RetryableError, withRetry } from '../lib/util';
+import { spend } from '../lib/budget';
 
 const GRAPH = 'https://graph.facebook.com/v21.0';
 
@@ -20,6 +21,7 @@ export const instagramConnector: SourceConnector = {
     const url = `${GRAPH}/${encodeURIComponent(igId)}?fields=${encodeURIComponent(fields)}`;
     const data = await withRetry(async () => {
       let res: Response;
+      spend();
       try { res = await fetch(url, { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(12_000) }); }
       catch (e) { throw new RetryableError((e as Error).message); }
       if (res.status === 429 || res.status >= 500) throw new RetryableError(`Meta API HTTP ${res.status}`);

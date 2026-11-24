@@ -32,6 +32,9 @@ La detección automática de nuevos reels (Instagram Business Discovery) se suma
 ### Motor de IA y traductor
 Prioridad: `AI_API_KEY` (Anthropic/OpenAI) > Workers AI (binding `AI`, modelo Llama 3.3 70B, configurable con `WORKERS_AI_MODEL`) > modo heurístico. Los textos que no están en español se traducen de forma literal con `m2m100` (Workers AI) y se muestran como «Traducción literal» solo de referencia. El cron reprocesa cada día lo que quedó sin IA. Workers AI tiene cuota gratuita diaria; sobre ella se cobra.
 
+### Límite del plan de Workers
+El plan gratuito permite 50 operaciones (D1, fetch, IA) por ejecución. El Coordinador mide el consumo (`SUBREQUEST_BUDGET`, 45 por defecto) y, si no alcanza, deja lo pendiente en estado «Procesando» y lo retoma en el siguiente cron horario. Con el plan de pago de Workers (1000 operaciones) conviene subir `SUBREQUEST_BUDGET` a `900` en `wrangler.toml`: todo se procesa en una sola ejecución.
+
 ### Modo sin IA (honesto)
 Sin `AI_API_KEY` el Curador puntúa por reglas y el Copywriter solo ajusta tuteo/léxico **si el original ya está en español**. Si está en inglés o francés **no traduce ni inventa**: deja el copy marcado «PENDIENTE DE ADAPTACIÓN CON IA» y no permite aprobarlo. Al configurar la IA, «Reprocesar con IA» (Monitor de marcas) rehace esos copies.
 

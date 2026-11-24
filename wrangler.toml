@@ -16,6 +16,8 @@ AI_PROVIDER = "anthropic"          # anthropic | openai (compatible con /chat/co
 AI_MODEL = "claude-sonnet-5-5"
 # AI_BASE_URL = "https://api.openai.com/v1"   # solo para AI_PROVIDER=openai u otro compatible
 ADMIN_EMAIL = "editor@oceanic.cl"
+# Operaciones (D1, fetch, IA) por ejecucion. Plan gratuito de Workers: 50 -> 45. Con plan de pago (1000) sube a 900.
+SUBREQUEST_BUDGET = "45"
 
 [[d1_databases]]
 binding = "DB"

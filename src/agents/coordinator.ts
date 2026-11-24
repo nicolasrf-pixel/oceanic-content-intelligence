@@ -11,6 +11,7 @@ import { hasBlocking, reviewCopy } from './editor';
 import { getLlm } from './llm';
 import { logAgent, logMonitor, type AgentCtx } from './log';
 import { scout, knownUrls } from './scout';
+import { COST, remaining, resetBudget } from '../lib/budget';
 
 const LOCK_TTL_MS = 10 * 60_000;
 
@@ -29,7 +30,7 @@ export async function releaseLock(env: Env, runId: string) {
 
 export function parseConfig(a: AccountRow): AccountConfig { try { return JSON.parse(a.config_json || '{}'); } catch { return {}; } }
 
-export interface RunSummary { runId: string; status: 'ok' | 'locked' | 'disabled' | 'partial'; accounts: number; found: number; created: number; duplicates: number; irrelevant: number; errors: number; aiMode: 'ia' | 'heuristico' }
+export interface RunSummary { runId: string; status: 'ok' | 'locked' | 'disabled' | 'partial'; accounts: number; found: number; created: number; duplicates: number; irrelevant: number; errors: number; aiMode: 'ia' | 'heuristico'; deferred: number; budgetCut: boolean }
 
 /** Persiste análisis + copy y deja la publicación lista para revisión humana. NUNCA publica. */
 export async function processPublication(ctx: AgentCtx, pubId: string, o: { feedback?: string; copyOnly?: boolean } = {}): Promise<{ status: string }> {
@@ -60,7 +61,7 @@ export async function processPublication(ctx: AgentCtx, pubId: string, o: { feed
   // Traducción literal de referencia (Workers AI) para que el editor lea el original en español.
   const source = `${pub.title ?? ''}\n${pub.original_text}`;
   const lang = detectLang(source);
-  if (!pub.original_es && lang !== 'es' && lang !== 'other') {
+  if (!pub.original_es && lang !== 'es' && lang !== 'other' && remaining() > 18) {   // la traducción es solo referencia: se omite si el presupuesto está justo
     const tr = await translateToSpanish(env, `${pub.title ? pub.title + '\n\n' : ''}${pub.original_text}`, lang);
     if (tr) await exec(env, 'UPDATE publications SET original_es = ? WHERE id = ?', tr, pub.id);
   }
@@ -82,12 +83,21 @@ export async function processPublication(ctx: AgentCtx, pubId: string, o: { feed
   return { status: 'pending' };
 }
 
-export async function runMonitoring(env: Env, opts: { trigger: 'cron' | 'manual'; brandId?: string; accountId?: string } ): Promise<RunSummary> {
+export async function runMonitoring(env: Env, opts: { trigger: 'cron' | 'manual'; brandId?: string; accountId?: string; dueOnly?: boolean }): Promise<RunSummary> {
+  resetBudget(env.SUBREQUEST_BUDGET);
   const runId = uid('run_');
   const llm = (() => { try { return getLlm(env); } catch { return null; } })();
-  const sum: RunSummary = { runId, status: 'ok', accounts: 0, found: 0, created: 0, duplicates: 0, irrelevant: 0, errors: 0, aiMode: llm ? 'ia' : 'heuristico' };
+  const sum: RunSummary = { runId, status: 'ok', accounts: 0, found: 0, created: 0, duplicates: 0, irrelevant: 0, errors: 0, aiMode: llm ? 'ia' : 'heuristico', deferred: 0, budgetCut: false };
   const settings = await getSettings(env);
   if (opts.trigger === 'cron' && settings.monitoring_enabled !== '1') { sum.status = 'disabled'; return sum; }
+  let sql = `SELECT a.* FROM social_accounts a JOIN brands b ON b.id = a.brand_id WHERE a.enabled = 1 AND b.active = 1 AND a.connector != 'manual'`;
+  const binds: unknown[] = [];
+  if (opts.accountId) { sql += ' AND a.id = ?'; binds.push(opts.accountId); }
+  if (opts.brandId) { sql += ' AND a.brand_id = ?'; binds.push(opts.brandId); }
+  if (opts.dueOnly) sql += ` AND (a.last_checked_at IS NULL OR a.last_checked_at < datetime('now','-20 hours') OR a.last_checked_at < '2001-01-01')`;
+  sql += ` ORDER BY COALESCE(a.last_checked_at, '') ASC`;   // la menos revisada primero: así nadie queda sin turno si el presupuesto se acaba
+  const accounts = await q<AccountRow>(env, sql, ...binds);
+  if (opts.dueOnly && !accounts.length) return sum;      // nada pendiente: no deja ruido en los registros
   if (!(await acquireLock(env, runId))) {
     await logMonitor(env, { runId, kind: 'skipped', status: 'locked', message: 'Ya hay una ejecución en curso (candado activo).' });
     sum.status = 'locked'; return sum;
@@ -99,13 +109,8 @@ export async function runMonitoring(env: Env, opts: { trigger: 'cron' | 'manual'
   const maxAge = Math.max(1, Number(settings.max_age_days) || 45);
   try {
     await logMonitor(env, { runId, kind: 'run_start', message: `${opts.trigger} · modo ${sum.aiMode}` });
-    let sql = `SELECT a.* FROM social_accounts a JOIN brands b ON b.id = a.brand_id WHERE a.enabled = 1 AND b.active = 1 AND a.connector != 'manual'`;
-    const binds: unknown[] = [];
-    if (opts.accountId) { sql += ' AND a.id = ?'; binds.push(opts.accountId); }
-    if (opts.brandId) { sql += ' AND a.brand_id = ?'; binds.push(opts.brandId); }
-    const accounts = await q<AccountRow>(env, sql, ...binds);
-
     for (const account of accounts) {
+      if (remaining() < COST.account) { sum.budgetCut = true; break; }   // sin presupuesto del plan: el resto se retoma en la siguiente hora
       sum.accounts++;
       const connector = CONNECTORS[account.connector];
       if (!connector) { await markAccount(env, account.id, 'error', `Conector desconocido: ${account.connector}`); sum.errors++; continue; }
@@ -127,6 +132,7 @@ export async function runMonitoring(env: Env, opts: { trigger: 'cron' | 'manual'
               VALUES (?,?,?,?,?,?,?,?,?,?,?,?, 'new')`, id, account.brand_id, account.id, it.url, it.externalId, it.hash, it.title ?? null, it.text.slice(0, 8000), detectLang(it.text), it.mediaType ?? 'none', it.mediaUrl ?? null, it.publishedAt ?? null);
           } catch { sum.duplicates++; continue; }   // carrera contra UNIQUE: duplicado
           created++; budget--; sum.created++;
+          if (remaining() < COST.publication) { sum.deferred++; sum.budgetCut = true; continue; }   // queda 'new'; se procesa en el siguiente turno
           try {
             const r = await withRetry(async () => processPublication(ctx, id), { attempts: 2, baseMs: 800 });
             if (r.status === 'irrelevant') sum.irrelevant++;
@@ -144,13 +150,14 @@ export async function runMonitoring(env: Env, opts: { trigger: 'cron' | 'manual'
       }
     }
     if (sum.errors) sum.status = 'partial';
-    await logMonitor(env, { runId, kind: 'run_end', status: sum.status, found: sum.found, newCount: sum.created, duplicates: sum.duplicates, message: `${sum.accounts} cuentas, ${sum.irrelevant} irrelevantes, ${sum.errors} errores` });
+    await logMonitor(env, { runId, kind: 'run_end', status: sum.status, found: sum.found, newCount: sum.created, duplicates: sum.duplicates, message: `${sum.accounts} cuentas, ${sum.irrelevant} irrelevantes, ${sum.errors} errores${sum.budgetCut ? `; límite del plan alcanzado (${sum.deferred} por procesar en la próxima hora)` : ''}` });
   } finally { await releaseLock(env, runId); }
   return sum;
 }
 
 /** Reprocesa publicaciones (p. ej. tras configurar IA real): las que están en 'new' o pendientes con copy heurístico. */
-export async function reprocess(env: Env, opts: { ids?: string[]; limit?: number; scope?: 'heuristic' | 'failed' | 'all_pending' }): Promise<{ runId: string; processed: number; errors: number; aiMode: string }> {
+export async function reprocess(env: Env, opts: { ids?: string[]; limit?: number; scope?: 'heuristic' | 'failed' | 'all_pending'; keepBudget?: boolean }): Promise<{ runId: string; processed: number; errors: number; aiMode: string }> {
+  if (!opts.keepBudget) resetBudget(env.SUBREQUEST_BUDGET);
   const runId = uid('rep_');
   const llm = (() => { try { return getLlm(env); } catch { return null; } })();
   const ctx: AgentCtx = { env, llm, runId };
@@ -165,6 +172,7 @@ export async function reprocess(env: Env, opts: { ids?: string[]; limit?: number
   }
   let processed = 0, errors = 0;
   for (const id of ids.slice(0, 25)) {
+    if (remaining() < COST.publication) break;   // el resto se retoma en el siguiente turno
     try { await processPublication(ctx, id); processed++; } catch (e) { errors++; await logAgent(env, { runId, publicationId: id, agent: 'coordinator', status: 'error', message: (e as Error).message }); }
   }
   await logAgent(env, { runId, agent: 'coordinator', status: errors ? 'error' : 'ok', message: `Reproceso: ${processed} ok, ${errors} con error (${llm ? 'IA' : 'heurístico'})` });
