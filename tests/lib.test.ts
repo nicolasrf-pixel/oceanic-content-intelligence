@@ -238,3 +238,20 @@ describe('presupuesto de subsolicitudes (plan gratuito)', () => {
   });
   it('una publicación completa cabe en una ejecución del plan gratuito', () => { expect(COST.publication + COST.account).toBeLessThan(45); });
 });
+
+import { shouldStartCycle } from '../src/agents/coordinator';
+describe('ciclo cada N días', () => {
+  const at = (iso: string) => new Date(iso);
+  it('arranca solo a la hora local y si pasaron ~N días', () => {
+    // 2026-12-15 11:00Z = 08:00 en Santiago (verano)
+    expect(shouldStartCycle('8', 2, null, at('2026-12-15T11:00:00Z'))).toBe(true);                       // primer ciclo
+    expect(shouldStartCycle('8', 2, '2026-12-15T11:00:05Z', at('2026-12-16T11:00:00Z'))).toBe(false);    // solo pasó 1 día
+    expect(shouldStartCycle('8', 2, '2026-12-15T11:00:05Z', at('2026-12-17T11:00:00Z'))).toBe(true);     // pasaron 2 días
+    expect(shouldStartCycle('8', 2, '2026-12-15T11:00:05Z', at('2026-12-17T14:00:00Z'))).toBe(false);    // hora equivocada
+    expect(shouldStartCycle('8', 1, '2026-12-15T11:00:05Z', at('2026-12-16T11:00:00Z'))).toBe(true);     // diario
+  });
+  it('acota los días a 1–7', () => {
+    expect(shouldStartCycle('8', 99, '2026-12-01T11:00:00Z', at('2026-12-09T11:00:00Z'))).toBe(true);    // 99 → 7 días
+    expect(shouldStartCycle('8', 99, '2026-12-05T11:00:00Z', at('2026-12-09T11:00:00Z'))).toBe(false);
+  });
+});

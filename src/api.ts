@@ -422,6 +422,7 @@ route('PUT', '/api/settings', async ({ req, env }) => {
     if (!(k in SETTING_DEFAULTS) || HIDDEN_SETTINGS.includes(k)) throw new HttpError(400, `Ajuste desconocido: ${k}`);
     const val = String(v).trim().slice(0, 2000);
     if (k === 'monitoring_enabled' && !['0', '1'].includes(val)) throw new HttpError(400, 'monitoring_enabled debe ser 0 o 1');
+    if (k === 'monitoring_every_days' && !(Number(val) >= 1 && Number(val) <= 7)) throw new HttpError(400, 'monitoring_every_days debe estar entre 1 y 7');
     if (k === 'monitoring_hours_local' && !/^\d{1,2}(,\d{1,2})*$/.test(val.replace(/\s/g, '')) ) throw new HttpError(400, 'Horas locales inválidas (ej.: 8 o 8,18)');
     if (['max_new_per_account', 'max_new_per_run', 'max_age_days'].includes(k) && !(Number(val) >= 1 && Number(val) <= 100)) throw new HttpError(400, `${k} debe estar entre 1 y 100`);
     await exec(env, `INSERT INTO settings (key, value, updated_at) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`, k, val.replace(/\s/g, '') && k === 'monitoring_hours_local' ? val.replace(/\s/g, '') : val, nowIso());

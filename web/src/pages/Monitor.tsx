@@ -76,7 +76,8 @@ export function Monitor() {
 
       <section className="panel mt"><div className="panel-head"><h3>Programación y límites</h3></div><div className="pad settings">
         <label className="switch"><input type="checkbox" checked={s.monitoring_enabled === '1'} onChange={(e) => setS({ ...s, monitoring_enabled: e.target.checked ? '1' : '0' })} /><span>Monitoreo automático (cron) activo</span></label>
-        <div className="field"><label>Hora(s) de ejecución, hora de Santiago (ej.: 8 o 8,18)</label><input value={s.monitoring_hours_local ?? ''} onChange={(e) => setS({ ...s, monitoring_hours_local: e.target.value })} /></div>
+        <div className="field"><label>Revisar todas las fuentes cada N días (1 a 7)</label><input type="number" min={1} max={7} value={s.monitoring_every_days ?? '2'} onChange={(e) => setS({ ...s, monitoring_every_days: e.target.value })} /></div>
+        <div className="field"><label>Hora de inicio de la revisión, hora de Santiago (ej.: 8)</label><input value={s.monitoring_hours_local ?? ''} onChange={(e) => setS({ ...s, monitoring_hours_local: e.target.value })} /></div>
         <div className="field"><label>Máx. publicaciones nuevas por cuenta</label><input type="number" value={s.max_new_per_account ?? ''} onChange={(e) => setS({ ...s, max_new_per_account: e.target.value })} /></div>
         <div className="field"><label>Máx. publicaciones nuevas por ejecución</label><input type="number" value={s.max_new_per_run ?? ''} onChange={(e) => setS({ ...s, max_new_per_run: e.target.value })} /></div>
         <div className="field"><label>Ignorar contenido de más de N días</label><input type="number" value={s.max_age_days ?? ''} onChange={(e) => setS({ ...s, max_age_days: e.target.value })} /></div>

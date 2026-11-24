@@ -83,7 +83,7 @@ export async function processPublication(ctx: AgentCtx, pubId: string, o: { feed
   return { status: 'pending' };
 }
 
-export async function runMonitoring(env: Env, opts: { trigger: 'cron' | 'manual'; brandId?: string; accountId?: string; dueOnly?: boolean }): Promise<RunSummary> {
+export async function runMonitoring(env: Env, opts: { trigger: 'cron' | 'manual'; brandId?: string; accountId?: string; dueOnly?: boolean; dueSince?: string }): Promise<RunSummary> {
   resetBudget(env.SUBREQUEST_BUDGET);
   const runId = uid('run_');
   const llm = (() => { try { return getLlm(env); } catch { return null; } })();
@@ -94,7 +94,7 @@ export async function runMonitoring(env: Env, opts: { trigger: 'cron' | 'manual'
   const binds: unknown[] = [];
   if (opts.accountId) { sql += ' AND a.id = ?'; binds.push(opts.accountId); }
   if (opts.brandId) { sql += ' AND a.brand_id = ?'; binds.push(opts.brandId); }
-  if (opts.dueOnly) sql += ` AND (a.last_checked_at IS NULL OR a.last_checked_at < datetime('now','-20 hours') OR a.last_checked_at < '2001-01-01')`;
+  if (opts.dueOnly) { sql += ' AND (a.last_checked_at IS NULL OR a.last_checked_at < ?)'; binds.push((opts.dueSince ?? new Date(Date.now() - 20 * 3600_000).toISOString()).replace('T', ' ').slice(0, 19)); }
   sql += ` ORDER BY COALESCE(a.last_checked_at, '') ASC`;   // la menos revisada primero: así nadie queda sin turno si el presupuesto se acaba
   const accounts = await q<AccountRow>(env, sql, ...binds);
   if (opts.dueOnly && !accounts.length) return sum;      // nada pendiente: no deja ruido en los registros
@@ -181,6 +181,17 @@ export async function reprocess(env: Env, opts: { ids?: string[]; limit?: number
 
 async function markAccount(env: Env, id: string, status: string, error: string | null) {
   await exec(env, 'UPDATE social_accounts SET last_checked_at = ?, last_status = ?, last_error = ? WHERE id = ?', nowIso(), status, error, id);
+}
+
+/**
+ * Ciclo de revisión cada N días: arranca un ciclo nuevo cuando coincide la hora local configurada y han pasado
+ * (N·24 − 2) h desde el último inicio. Entre ciclos, los turnos horarios solo retoman fuentes aún no revisadas en el ciclo vigente.
+ */
+export function shouldStartCycle(hoursSetting: string, everyDays: number, cycleStartIso: string | null, now = new Date()): boolean {
+  const days = Math.min(7, Math.max(1, Math.round(everyDays) || 1));
+  const last = cycleStartIso ? Date.parse(cycleStartIso) : 0;
+  const elapsedH = (now.getTime() - (isNaN(last) ? 0 : last)) / 3_600_000;
+  return shouldRunNow(hoursSetting, now) && elapsedH >= days * 24 - 2;
 }
 
 /** ¿Toca ejecutar el cron ahora? Compara la hora local de Santiago con monitoring_hours_local ("8" o "8,18"). */

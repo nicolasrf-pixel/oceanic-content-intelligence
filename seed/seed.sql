@@ -52,6 +52,7 @@ INSERT OR IGNORE INTO social_accounts (id,brand_id,platform,handle,url,connector
 INSERT OR IGNORE INTO settings (key,value) VALUES
 ('monitoring_enabled','1'),
 ('monitoring_hours_local','8'),
+('monitoring_every_days','2'),
 ('max_new_per_account','5'),
 ('max_new_per_run','12'),
 ('max_age_days','45'),

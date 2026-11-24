@@ -27,6 +27,9 @@
 - Respuesta: presupuesto por ejecución (`SUBREQUEST_BUDGET`, 45 en plan gratuito; subir a 900 con plan de pago). Si no alcanza, lo pendiente queda en estado «new» y se retoma en el siguiente cron horario; las fuentes se revisan de la menos reciente a la más reciente, y el cron horario retoma las que llevan más de 20 h sin revisar y rehace copies sin IA. Con el plan gratuito el sistema converge, pero lento (≈1–2 publicaciones por hora).
 - Hashtags ahora deterministas (el modelo cometía errores de tipeo) y prompt más estricto contra adjetivos/afirmaciones que el original no dice.
 
+## Decisión del cliente: plan gratuito para siempre, revisión cada 2 días
+Ajuste `monitoring_every_days` (por defecto 2) + ciclo (`monitoring_cycle_start`, interno). Probado con pruebas unitarias de la lógica de ciclo; el comportamiento real se verá en el primer ciclo (8:00 Santiago).
+
 ## NO verificado todavía
 - Despliegue real en Cloudflare (D1/R2 remotos, cron en producción).
 - Llamadas a un proveedor de IA real (solo probado con API simulada). Los copies reales en español de Chile deben revisarse con el usuario.
