@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 
 export const CATEGORY_LABELS: Record<string, string> = { lanzamiento: 'Lanzamiento', producto: 'Producto', evento: 'Evento', estilo_de_vida: 'Estilo de vida', tecnologia: 'Tecnología', corporativo: 'Corporativo' };
-export const STATUS_LABELS: Record<string, string> = { new: 'Procesando', pending: 'Por revisar', approved: 'Aprobado', discarded: 'Descartado', saved: 'Guardado', irrelevant: 'Irrelevante' };
+export const STATUS_LABELS: Record<string, string> = { new: 'Procesando', pending: 'Por revisar', approved: 'Listo para publicar', published: 'Publicado por mí', discarded: 'Descartado', saved: 'Guardado', irrelevant: 'Irrelevante' };
 export const PRIORITY_LABELS: Record<string, string> = { alta: 'Alta', media: 'Media', baja: 'Baja' };
 
 export function fmtDate(s?: string | null, withTime = false) {
@@ -14,10 +14,10 @@ export function fmtDate(s?: string | null, withTime = false) {
 export const mediaSrc = (p: { id?: string; publication_id?: string; media_r2_key?: string | null; media_url?: string | null }) =>
   p.media_r2_key ? `/api/publications/${p.id ?? p.publication_id}/media` : p.media_url || '';
 
-export function Media({ p, className }: { p: any; className?: string }) {
+export function Media({ p, className, controls = true }: { p: any; className?: string; controls?: boolean }) {
   const src = mediaSrc(p);
   if (!src) return <div className={`media-ph ${className ?? ''}`}><span>Sin imagen</span></div>;
-  if (p.media_type === 'video' && (p.media_r2_key || /\.(mp4|webm)(\?|$)/i.test(src))) return <video className={className} src={src} controls preload="metadata" />;
+  if (p.media_type === 'video' && (p.media_r2_key || /\.(mp4|webm)(\?|$)/i.test(src))) return <video className={className} src={src + (p.media_r2_key ? '#t=0.1' : '')} controls={controls} muted={!controls} playsInline preload="metadata" />;
   return <img className={className} src={src} alt="" loading="lazy" referrerPolicy="no-referrer" />;
 }
 
@@ -72,7 +72,7 @@ export function useAsync<T>(fn: () => Promise<T>, deps: unknown[]) {
 export function PubCard({ p, onOpen }: { p: any; onOpen: () => void }) {
   return (
     <article className="card" onClick={onOpen} tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && onOpen()}>
-      <div className="card-visual"><Media p={p} /><span className="chip-brand">{p.brand_name}</span>{p.score != null && <span className={`chip-score ${p.priority}`}>{p.score}</span>}</div>
+      <div className="card-visual"><Media p={p} controls={false} />{p.media_type === 'video' && <span className="play">▶</span>}<span className="chip-brand">{p.brand_name}</span>{p.score != null && <span className={`chip-score ${p.priority}`}>{p.score}</span>}</div>
       <div className="card-body">
         <div className="tags">{p.category && <span className="tag">{CATEGORY_LABELS[p.category] ?? p.category}</span>}<StatusPill status={p.status} />{p.needs_ai ? <span className="pill warn">Requiere IA</span> : null}</div>
         <h3>{p.title || 'Sin título'}</h3>

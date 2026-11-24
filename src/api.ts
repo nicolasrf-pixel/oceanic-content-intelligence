@@ -2,7 +2,7 @@ import type { AccountRow, Env, PubRow } from './types';
 import { CATEGORIES } from './types';
 import { authenticate, login, logoutResponse } from './lib/auth';
 import { exec, getSettings, HIDDEN_SETTINGS, one, q, SETTING_DEFAULTS } from './lib/db';
-import { HttpError, json, nowIso, uid, sha256Hex } from './lib/util';
+import { HttpError, canonicalUrl, json, nowIso, uid, sha256Hex } from './lib/util';
 import { assertPublicHttpsUrl } from './lib/safe-fetch';
 import { buildManualItem } from './connectors/manual';
 import { contentHash } from './agents/scout';
@@ -78,6 +78,16 @@ route('GET', '/api/dashboard', async ({ env }) => {
   return json({ counts, byBrand, accounts, lastRun, top, upcoming, ai: { mode: llm ? 'ia' : 'heuristico', provider: llm?.provider ?? null, model: llm?.model ?? null } });
 });
 
+async function ensureManualAccount(env: Env, brandId: string): Promise<AccountRow> {
+  let acc = await one<AccountRow>(env, `SELECT * FROM social_accounts WHERE brand_id = ? AND connector = 'manual' LIMIT 1`, brandId);
+  if (!acc) {
+    const id = uid('acc_');
+    await exec(env, `INSERT INTO social_accounts (id, brand_id, platform, url, connector, enabled, permission_status) VALUES (?,?,?,?,?,0,'manual')`, id, brandId, 'manual', 'manual://incorporacion', 'manual');
+    acc = (await one<AccountRow>(env, 'SELECT * FROM social_accounts WHERE id = ?', id))!;
+  }
+  return acc;
+}
+
 // ───────────── Publicaciones ─────────────
 const PUB_SELECT = `SELECT p.id, p.brand_id, b.name brand_name, p.account_id, p.source_url, p.title, p.category, p.score, p.priority, p.status, p.media_type, p.media_url, p.media_r2_key,
   p.published_at, p.detected_at, p.updated_at, p.original_lang, a.platform,
@@ -93,6 +103,8 @@ function listFilters(url: URL, forceStatus?: string) {
   if (g('category')) { w.push('p.category = ?'); b.push(g('category')); }
   const status = forceStatus ?? g('status'); if (status) { w.push('p.status = ?'); b.push(status); }
   if (g('priority')) { w.push('p.priority = ?'); b.push(g('priority')); }
+  if (['video', 'image', 'none'].includes(g('media'))) { w.push('p.media_type = ?'); b.push(g('media')); }
+  if (g('has_file') === '1') w.push('p.media_r2_key IS NOT NULL');
   if (g('from') && ISO_DATE.test(g('from'))) { w.push('date(COALESCE(p.published_at, p.detected_at)) >= ?'); b.push(g('from')); }
   if (g('to') && ISO_DATE.test(g('to'))) { w.push('date(COALESCE(p.published_at, p.detected_at)) <= ?'); b.push(g('to')); }
   if (g('q')) { w.push(`(p.title LIKE ? ESCAPE '\\' OR p.original_text LIKE ? ESCAPE '\\' OR EXISTS (SELECT 1 FROM generated_copies c WHERE c.publication_id = p.id AND c.is_current = 1 AND c.copy_es_cl LIKE ? ESCAPE '\\'))`); const like = `%${g('q').replace(/[%_\\]/g, '\\$&')}%`; b.push(like, like, like); }
@@ -120,12 +132,7 @@ route('POST', '/api/publications/manual', async ({ req, env, user }) => {
   const brand = await one(env, 'SELECT id FROM brands WHERE id = ? AND active = 1', brandId);
   if (!brand) throw new HttpError(400, 'Selecciona una marca válida');
   const item = await buildManualItem(env, { url: str(b.url, 2000), text: str(b.text, 8000), title: str(b.title, 300), mediaUrl: str(b.mediaUrl, 2000) || undefined });
-  let acc = await one<AccountRow>(env, `SELECT * FROM social_accounts WHERE brand_id = ? AND connector = 'manual' LIMIT 1`, brandId);
-  if (!acc) {
-    const id = uid('acc_');
-    await exec(env, `INSERT INTO social_accounts (id, brand_id, platform, url, connector, enabled, permission_status) VALUES (?,?,?,?,?,0,'manual')`, id, brandId, 'manual', 'manual://incorporacion', 'manual');
-    acc = (await one<AccountRow>(env, 'SELECT * FROM social_accounts WHERE id = ?', id))!;
-  }
+  const acc = await ensureManualAccount(env, brandId);
   const hash = await contentHash(item);
   const dup = await one<{ id: string }>(env, 'SELECT id FROM publications WHERE content_hash = ? OR (account_id = ? AND external_id = ?) LIMIT 1', hash, acc.id, item.externalId);
   if (dup) throw new HttpError(409, 'Esta publicación ya existe en el sistema', 'duplicate');
@@ -167,6 +174,7 @@ route('POST', '/api/publications/:id/action', async ({ req, env, params, user })
     case 'discard': if (reason.length < 3) throw new HttpError(400, 'Indica el motivo del descarte'); status = 'discarded'; break;
     case 'save': status = 'saved'; break;
     case 'reset': status = 'pending'; break;
+    case 'published': status = 'published'; break;   // registro manual: el editor lo subió él mismo desde Meta
     default: throw new HttpError(400, 'Acción no válida');
   }
   await exec(env, `UPDATE publications SET status = ?, discard_reason = ?, updated_at = ? WHERE id = ?`, status, action === 'discard' ? reason : null, nowIso(), params.id);
@@ -202,34 +210,102 @@ route('POST', '/api/publications/:id/regenerate', async ({ req, env, params, use
   return json({ ok: true, aiMode: llm ? 'ia' : 'heuristico' });
 });
 
-// ───────────── Medios (R2) ─────────────
-const MEDIA_TYPES: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'video/mp4': 'mp4' };
-const MAX_MEDIA = 25 * 1024 * 1024;
+// ───────────── Reels y medios (R2) ─────────────
+const MEDIA_TYPES: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'video/mp4': 'mp4', 'video/quicktime': 'mov' };
+const MAX_IMAGE = 25 * 1024 * 1024;
+const MAX_VIDEO = 100 * 1024 * 1024;   // límite de cuerpo de solicitud de Workers (planes Free/Pro)
 
-route('POST', '/api/publications/:id/media', async ({ req, env, params, user }) => {
-  const form = await req.formData().catch(() => { throw new HttpError(400, 'Formulario inválido'); });
-  if (form.get('rightsConfirmed') !== 'true') throw new HttpError(400, 'Debes confirmar que cuentas con los derechos de uso del material.', 'rights_required');
-  const file = form.get('file');
-  if (!(file instanceof File)) throw new HttpError(400, 'Falta el archivo');
-  const ext = MEDIA_TYPES[file.type];
-  if (!ext) throw new HttpError(415, 'Formato no permitido (JPG, PNG, WebP, GIF o MP4)');
-  if (file.size > MAX_MEDIA) throw new HttpError(413, 'El archivo supera 25 MB');
-  const pub = await one<PubRow>(env, 'SELECT * FROM publications WHERE id = ?', params.id);
-  if (!pub) throw new HttpError(404, 'Publicación no encontrada');
-  const key = `publications/${params.id}/${uid()}.${ext}`;
-  await env.MEDIA.put(key, file.stream(), { httpMetadata: { contentType: file.type }, customMetadata: { uploadedBy: user.email, rights: 'confirmed_by_editor', sha256: await sha256Hex(`${file.name}:${file.size}`) } });
-  if (pub.media_r2_key) await env.MEDIA.delete(pub.media_r2_key).catch(() => {});
-  await exec(env, `UPDATE publications SET media_r2_key = ?, media_rights = 'confirmed_by_editor', media_type = ?, updated_at = ? WHERE id = ?`, key, file.type.startsWith('video') ? 'video' : 'image', nowIso(), params.id);
-  await exec(env, `INSERT INTO approvals (id, publication_id, action, actor, reason) VALUES (?,?, 'media', ?, 'derechos confirmados por el editor')`, uid('ap_'), params.id, user.email);
-  return json({ key }, 201);
+/** Alta de un reel (o enlace) en el panel. El archivo se sube después, en streaming, a /publications/:id/media-file. */
+route('POST', '/api/reels', async ({ req, env, user }) => {
+  const b = await body(req);
+  const brandId = str(b.brandId, 100);
+  if (!(await one(env, 'SELECT id FROM brands WHERE id = ? AND active = 1', brandId))) throw new HttpError(400, 'Selecciona una marca válida');
+  const rawUrl = str(b.url, 2000); const fileName = str(b.fileName, 200); const fileSize = Number(b.fileSize) || 0;
+  if (!rawUrl && !fileName) throw new HttpError(400, 'Indica el enlace del reel o sube un archivo');
+  let url = '';
+  if (rawUrl) url = canonicalUrl(assertPublicHttpsUrl(rawUrl).toString());
+  const caption = str(b.caption, 8000); const title = str(b.title, 300) || null;
+  const externalId = url || `file:${fileName}:${fileSize}`;
+  const acc = await ensureManualAccount(env, brandId);
+  const hash = await sha256Hex(`reel|${externalId}`);
+  const dup = await one<{ id: string }>(env, 'SELECT id FROM publications WHERE content_hash = ? OR (account_id = ? AND external_id = ?) LIMIT 1', hash, acc.id, externalId);
+  if (dup) throw new HttpError(409, 'Este reel ya está en el panel', 'duplicate');
+  const id = uid('pub_');
+  await exec(env, `INSERT INTO publications (id, brand_id, account_id, source_url, external_id, content_hash, title, original_text, original_lang, media_type, published_at, status)
+    VALUES (?,?,?,?,?,?,?,?,?, 'video', ?, 'pending')`, id, brandId, acc.id, url || 'manual://archivo', externalId, hash, title, caption, caption ? detectLang(caption) : null, str(b.publishedAt, 30) || null);
+  await exec(env, `INSERT INTO approvals (id, publication_id, action, actor, reason) VALUES (?,?, 'manual_add', ?, ?)`, uid('ap_'), id, user.email, url || fileName);
+  let processed = false;
+  if (caption.length >= 10) {
+    const llm = (() => { try { return getLlm(env); } catch { return null; } })();
+    try { await processPublication({ env, llm, runId: uid('reel_') }, id); processed = true; } catch (e) { console.error('reel process', (e as Error).message); }
+  }
+  return json({ id, processed }, 201);
 });
 
-route('GET', '/api/publications/:id/media', async ({ env, params }) => {
-  const pub = await one<PubRow>(env, 'SELECT media_r2_key FROM publications WHERE id = ?', params.id);
+/** Completa o corrige el texto original de una publicación (p. ej. el caption del reel) y regenera análisis y copy. */
+route('PUT', '/api/publications/:id/original', async ({ req, env, params, user }) => {
+  const b = await body(req);
+  const text = str(b.text, 8000);
+  if (text.length < 10) throw new HttpError(400, 'Pega el texto original del reel (mínimo 10 caracteres)');
+  const pub = await one<PubRow>(env, 'SELECT * FROM publications WHERE id = ?', params.id);
+  if (!pub) throw new HttpError(404, 'Publicación no encontrada');
+  const hash = await contentHash({ title: str(b.title, 300), text });
+  const clash = await one<{ id: string }>(env, 'SELECT id FROM publications WHERE content_hash = ? AND id != ?', hash, params.id);
+  const finalHash = clash ? await sha256Hex(`${hash}|${params.id}`) : hash;
+  let url = pub.source_url;
+  if (b.url !== undefined && str(b.url, 2000)) url = canonicalUrl(assertPublicHttpsUrl(str(b.url, 2000)).toString());
+  await exec(env, `UPDATE publications SET title = ?, original_text = ?, original_lang = ?, content_hash = ?, source_url = ?, updated_at = ? WHERE id = ?`,
+    str(b.title, 300) || null, text, detectLang(text), finalHash, url, nowIso(), params.id);
+  await exec(env, `INSERT INTO approvals (id, publication_id, action, actor, reason) VALUES (?,?, 'edit_original', ?, NULL)`, uid('ap_'), params.id, user.email);
+  const llm = (() => { try { return getLlm(env); } catch { return null; } })();
+  await processPublication({ env, llm, runId: uid('orig_') }, params.id);
+  return json({ ok: true, aiMode: llm ? 'ia' : 'heuristico' });
+});
+
+/** Sube el archivo (video o imagen) en streaming directo a R2, sin cargarlo en memoria. Cuerpo = bytes del archivo. */
+route('POST', '/api/publications/:id/media-file', async ({ req, env, url, params, user }) => {
+  if (url.searchParams.get('rights') !== '1') throw new HttpError(400, 'Debes confirmar que cuentas con los derechos de uso del material.', 'rights_required');
+  const type = (req.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+  const ext = MEDIA_TYPES[type];
+  if (!ext) throw new HttpError(415, 'Formato no permitido (MP4, MOV, JPG, PNG, WebP o GIF)');
+  const size = Number(req.headers.get('content-length') || 0);
+  if (!size) throw new HttpError(411, 'Falta el tamaño del archivo');
+  if (size > (type.startsWith('video') ? MAX_VIDEO : MAX_IMAGE)) throw new HttpError(413, type.startsWith('video') ? 'El video supera 100 MB' : 'La imagen supera 25 MB');
+  const pub = await one<PubRow>(env, 'SELECT * FROM publications WHERE id = ?', params.id);
+  if (!pub) throw new HttpError(404, 'Publicación no encontrada');
+  if (!req.body) throw new HttpError(400, 'Cuerpo vacío');
+  const key = `publications/${params.id}/${uid()}.${ext}`;
+  await env.MEDIA.put(key, req.body, { httpMetadata: { contentType: type }, customMetadata: { uploadedBy: user.email, rights: 'confirmed_by_editor', fileName: (url.searchParams.get('name') || '').slice(0, 200) } });
+  if (pub.media_r2_key) await env.MEDIA.delete(pub.media_r2_key).catch(() => {});
+  await exec(env, `UPDATE publications SET media_r2_key = ?, media_rights = 'confirmed_by_editor', media_type = ?, updated_at = ? WHERE id = ?`, key, type.startsWith('video') ? 'video' : 'image', nowIso(), params.id);
+  await exec(env, `INSERT INTO approvals (id, publication_id, action, actor, reason) VALUES (?,?, 'media', ?, 'archivo subido; derechos confirmados por el editor')`, uid('ap_'), params.id, user.email);
+  return json({ key, size }, 201);
+});
+
+/** Reproduce o descarga el archivo propio. Soporta Range (necesario para adelantar videos en Safari/iOS). */
+route('GET', '/api/publications/:id/media', async ({ req, env, url, params }) => {
+  const pub = await one<PubRow & { brand_name: string }>(env, 'SELECT p.media_r2_key, p.media_type, b.name brand_name FROM publications p JOIN brands b ON b.id = p.brand_id WHERE p.id = ?', params.id);
   if (!pub?.media_r2_key) throw new HttpError(404, 'Sin archivo');
-  const obj = await env.MEDIA.get(pub.media_r2_key);
+  const hasRange = req.headers.has('range');
+  const obj = await env.MEDIA.get(pub.media_r2_key, hasRange ? { range: req.headers } : undefined);
   if (!obj) throw new HttpError(404, 'Archivo no encontrado');
-  return new Response(obj.body, { headers: { 'content-type': obj.httpMetadata?.contentType || 'application/octet-stream', 'cache-control': 'private, max-age=3600', 'x-content-type-options': 'nosniff' } });
+  const headers: Record<string, string> = {
+    'content-type': obj.httpMetadata?.contentType || 'application/octet-stream', 'cache-control': 'private, max-age=3600',
+    'x-content-type-options': 'nosniff', 'accept-ranges': 'bytes',
+  };
+  if (url.searchParams.get('download') === '1') {
+    const ext = pub.media_r2_key.split('.').pop();
+    headers['content-disposition'] = `attachment; filename="${pub.brand_name.replace(/[^A-Za-z0-9]+/g, '-')}-${params.id.slice(-6)}.${ext}"`;
+  }
+  const r = (obj as any).range as { offset?: number; length?: number; suffix?: number } | undefined;
+  if (hasRange && r) {
+    const start = r.suffix !== undefined ? obj.size - r.suffix : r.offset ?? 0;
+    const len = r.suffix !== undefined ? r.suffix : r.length ?? obj.size - start;
+    headers['content-range'] = `bytes ${start}-${start + len - 1}/${obj.size}`; headers['content-length'] = String(len);
+    return new Response((obj as R2ObjectBody).body, { status: 206, headers });
+  }
+  headers['content-length'] = String(obj.size);
+  return new Response((obj as R2ObjectBody).body, { headers });
 });
 
 // ───────────── Calendario ─────────────

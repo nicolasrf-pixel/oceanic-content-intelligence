@@ -9,11 +9,11 @@ export function Dashboard() {
   if (loading) return <Loading />;
   if (error || !data) return <Empty title="No se pudo cargar el panel">{error}</Empty>;
   const c = data.counts as Record<string, number>;
-  const stats = [['Por revisar', c.pending ?? 0, 'pending'], ['Aprobados', c.approved ?? 0, 'approved'], ['Guardados', c.saved ?? 0, 'saved'], ['Descartados', (c.discarded ?? 0) + (c.irrelevant ?? 0), 'discarded']];
+  const stats = [['Por revisar', c.pending ?? 0, 'pending'], ['Listos para publicar', c.approved ?? 0, 'approved'], ['Publicados por mí', c.published ?? 0, 'published'], ['Descartados', (c.discarded ?? 0) + (c.irrelevant ?? 0), 'discarded']];
   return (
     <>
       <div className="title-row"><div><span className="eyebrow">RESUMEN</span><h1>Panel editorial</h1><p className="muted">Publicaciones detectadas, estado de las fuentes y última ejecución del monitoreo.</p></div><button className="btn primary" onClick={() => go('bandeja')}>Ir a la bandeja</button></div>
-      <div className="stats">{stats.map(([l, v, s]) => <button key={l as string} className="stat" onClick={() => go(`bandeja?status=${s}`)}><span>{l}</span><strong>{v}</strong></button>)}</div>
+      <div className="stats">{stats.map(([l, v, s]) => <button key={l as string} className="stat" onClick={() => go(`reels?status=${s}`)}><span>{l}</span><strong>{v}</strong></button>)}</div>
       <div className="grid-2">
         <section className="panel">
           <div className="panel-head"><h3>Mejores oportunidades pendientes</h3><button className="link" onClick={() => go('bandeja')}>Ver todo</button></div>

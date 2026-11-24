@@ -25,3 +25,21 @@ export const qs = (o: Record<string, string | number | undefined>) => {
   const s = p.toString();
   return s ? '?' + s : '';
 };
+
+/** Sube un archivo en streaming (cuerpo = bytes) con progreso. */
+export function uploadFile(path: string, file: File, onProgress?: (pct: number) => void): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest();
+    x.open('POST', '/api' + path);
+    x.setRequestHeader('x-requested-with', 'oceanic');
+    x.setRequestHeader('content-type', file.type || 'application/octet-stream');
+    x.upload.onprogress = (e) => e.lengthComputable && onProgress?.(Math.round((e.loaded / e.total) * 100));
+    x.onload = () => {
+      let data: any = {}; try { data = JSON.parse(x.responseText); } catch { /* sin cuerpo */ }
+      if (x.status >= 200 && x.status < 300) resolve(data);
+      else { if (x.status === 401) window.dispatchEvent(new Event('oci-unauthorized')); reject(new ApiError(x.status, data.error || `Error ${x.status}`, data.code)); }
+    };
+    x.onerror = () => reject(new ApiError(0, 'Falló la conexión durante la subida'));
+    x.send(file);
+  });
+}

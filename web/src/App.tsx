@@ -3,6 +3,7 @@ import { api } from './api';
 import { ToastProvider, useAsync } from './ui';
 import { Dashboard } from './pages/Dashboard';
 import { Inbox } from './pages/Inbox';
+import { Reels } from './pages/Reels';
 import { Detail } from './pages/Detail';
 import { Library } from './pages/Library';
 import { CalendarPage } from './pages/Calendar';
@@ -10,7 +11,7 @@ import { Monitor } from './pages/Monitor';
 import { Logs } from './pages/Logs';
 
 const NAV = [
-  ['panel', 'Panel', '◧'], ['bandeja', 'Bandeja editorial', '☰'], ['biblioteca', 'Biblioteca', '▤'],
+  ['panel', 'Panel', '◧'], ['reels', 'Reels', '▶'], ['bandeja', 'Bandeja editorial', '☰'], ['biblioteca', 'Biblioteca', '▤'],
   ['calendario', 'Calendario', '▦'], ['monitor', 'Monitor de marcas', '◎'], ['registros', 'Registros', '≡'],
 ] as const;
 
@@ -48,10 +49,11 @@ function Login({ onDone }: { onDone: (email: string) => void }) {
 function Shell({ email, onLogout }: { email: string; onLogout: () => void }) {
   const hash = useHash(); const [open, setOpen] = useState(false);
   const [section, id] = hash.split('?')[0].split('/');
-  const current = section === 'publicacion' ? 'bandeja' : section;
+  const current = section === 'publicacion' ? (sessionStorage.getItem('oci-from') || 'reels') : section;
   const health = useAsync(() => api('/health'), []);
   let page;
   switch (section) {
+    case 'reels': page = <Reels />; break;
     case 'bandeja': page = <Inbox />; break;
     case 'publicacion': page = <Detail id={id} />; break;
     case 'biblioteca': page = <Library />; break;

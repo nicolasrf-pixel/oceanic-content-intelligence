@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { api } from '../api';
+import { api, uploadFile } from '../api';
 import { go } from '../App';
 import { Empty, fmtDate, Loading, Media, Modal, Score, StatusPill, useAsync, useToast, CATEGORY_LABELS } from '../ui';
 
@@ -9,8 +9,8 @@ export function Detail({ id }: { id: string }) {
   const toast = useToast();
   const { data, loading, error, reload } = useAsync(() => api(`/publications/${id}`), [id]);
   const [text, setText] = useState(''); const [tags, setTags] = useState(''); const [busy, setBusy] = useState('');
-  const [dialog, setDialog] = useState<'discard' | 'approve' | 'regen' | 'media' | null>(null);
-  const [aux, setAux] = useState({ reason: '', date: '', instructions: '', rights: false });
+  const [dialog, setDialog] = useState<'discard' | 'approve' | 'regen' | 'media' | 'original' | 'published' | null>(null);
+  const [aux, setAux] = useState({ reason: '', date: '', instructions: '', rights: false, otitle: '', otext: '', ourl: '', pct: 0 });
   const fileRef = useRef<HTMLInputElement>(null);
   const cur = data?.copies.find((c: any) => c.is_current);
   useEffect(() => { if (cur) { setText(cur.copy_es_cl); setTags(JSON.parse(cur.hashtags || '[]').join(' ')); } }, [cur?.id]);
@@ -48,7 +48,7 @@ export function Detail({ id }: { id: string }) {
           <section className="panel"><div className="media-box"><Media p={p} /></div>
             <div className="pad-sm between"><small className="muted">{p.media_rights === 'confirmed_by_editor' ? '✔ Archivo propio en R2 con derechos confirmados' : p.media_url ? 'Imagen enlazada desde la fuente (solo referencia; no usar sin permiso)' : 'Sin material visual'}</small>
               <button className="btn small" onClick={() => { setAux({ ...aux, rights: false }); setDialog('media'); }}>Subir material</button></div></section>
-          <section className="panel"><div className="panel-head"><h3>Texto original</h3><a className="link" href={p.source_url} target="_blank" rel="noopener noreferrer">Ver fuente ↗</a></div><div className="pad pre">{p.original_text}</div></section>
+          <section className="panel"><div className="panel-head"><h3>Texto original</h3><div className="actions"><button className="btn small" onClick={() => { setAux({ ...aux, otitle: p.title ?? '', otext: p.original_text ?? '', ourl: /^https?:/.test(p.source_url) ? p.source_url : '' }); setDialog('original'); }}>Editar</button>{/^https?:/.test(p.source_url) && <a className="link" href={p.source_url} target="_blank" rel="noopener noreferrer">Ver fuente ↗</a>}</div></div><div className="pad pre">{p.original_text || <span className="muted">Aún no hay texto. Pega el caption del reel con «Editar» para generar el copy.</span>}</div></section>
           <section className="panel"><div className="panel-head"><h3>Análisis editorial</h3><small className="muted">{analysis ? (analysis.provider === 'heuristic' ? 'Reglas (sin IA)' : `${analysis.provider} · ${analysis.model}`) : ''}</small></div>
             <div className="pad">{analysis ? <><p>{analysis.explanation}</p>{flags.length > 0 && <div className="tags">{flags.map((f) => <span key={f} className="tag">{f}</span>)}</div>}</> : <p className="muted">Sin análisis todavía.</p>}</div></section>
         </div>
@@ -67,17 +67,23 @@ export function Detail({ id }: { id: string }) {
           </section>
           {report && <section className="panel"><div className="panel-head"><h3>Informe del Editor</h3><span className={`pill ${report.approved ? 'ok' : 'err'}`}>{report.approved ? 'Sin bloqueos' : 'Con observaciones graves'}</span></div>
             <div className="pad-sm">{report.issues.length === 0 ? <p className="muted small pad-x">Sin observaciones: ortografía, tuteo y exactitud verificados.</p> : report.issues.map((i: any, n: number) => <div className="issue" key={n}><span className={`pill ${SEV[i.severity]}`}>{i.severity}</span><span>{i.message}</span></div>)}{report.corrected && <p className="muted small pad-x">El Editor aplicó correcciones automáticas al texto.</p>}</div></section>}
+          <section className="panel"><div className="panel-head"><h3>Para publicar</h3></div>
+            <div className="pad actions wrap">
+              {p.media_r2_key ? <a className="btn primary" href={`/api/publications/${id}/media?download=1`}>⬇ Descargar video</a> : <span className="muted small">Aún no hay archivo: súbelo en «Subir material».</span>}
+              <button className="btn" disabled={!cur} onClick={async () => { const t = `${text}\n\n${tags}`.trim(); try { await navigator.clipboard.writeText(t); toast('Copy y hashtags copiados'); } catch { toast('No se pudo copiar; selecciona el texto a mano', 'err'); } }}>Copiar copy + hashtags</button>
+            </div></section>
           <section className="panel"><div className="panel-head"><h3>Decisión</h3></div>
             <div className="pad actions wrap">
-              <button className="btn ok" disabled={!!busy || !cur || p.status === 'approved'} onClick={() => { setAux({ ...aux, date: '' }); setDialog('approve'); }}>✓ Aprobar</button>
+              <button className="btn ok" disabled={!!busy || !cur || p.status === 'approved'} onClick={() => { setAux({ ...aux, date: '' }); setDialog('approve'); }}>✓ Listo para publicar</button>
               <button className="btn" disabled={!!busy || p.status === 'saved'} onClick={() => act('save', {}, 'Guardado para después')}>Guardar para después</button>
               <button className="btn" disabled={!!busy} onClick={() => setDialog('regen')}>↻ Regenerar</button>
               <button className="btn danger" disabled={!!busy || p.status === 'discarded'} onClick={() => { setAux({ ...aux, reason: '' }); setDialog('discard'); }}>Descartar</button>
-              {['approved', 'saved', 'discarded', 'irrelevant'].includes(p.status) && <button className="btn" disabled={!!busy} onClick={() => act('reset', {}, 'Devuelto a revisión')}>Devolver a revisión</button>}
+              <button className="btn" disabled={!!busy || p.status === 'published'} onClick={() => { setAux({ ...aux, reason: '' }); setDialog('published'); }}>Marcar como publicado</button>
+              {['approved', 'saved', 'discarded', 'irrelevant', 'published'].includes(p.status) && <button className="btn" disabled={!!busy} onClick={() => act('reset', {}, 'Devuelto a revisión')}>Devolver a revisión</button>}
             </div>
             {p.discard_reason && <p className="pad-x muted small">Motivo de descarte: {p.discard_reason}</p>}
             {calendar.length > 0 && <div className="pad-sm">{calendar.map((c: any) => <span key={c.id} className="pill neutral">📅 {fmtDate(c.planned_date)}</span>)}</div>}
-            <p className="pad-x muted small">Aprobar no publica: el contenido queda en la biblioteca y, si lo indicas, con fecha tentativa en el calendario.</p>
+            <p className="pad-x muted small">Nada se publica desde aquí: tú descargas el video, le agregas el cierre con el logo y lo subes desde Meta. «Marcar como publicado» solo deja el registro.</p>
           </section>
           <section className="panel"><div className="panel-head"><h3>Historial</h3></div><div className="pad-sm">
             {approvals.map((a: any) => <div className="conn" key={a.id}><div><strong>{a.action}</strong><small>{a.actor}{a.reason ? ` · ${a.reason}` : ''}</small></div><small className="muted">{fmtDate(a.created_at, true)}</small></div>)}
@@ -96,11 +102,22 @@ export function Detail({ id }: { id: string }) {
       {dialog === 'regen' && <Modal title="Regenerar copy" onClose={() => setDialog(null)}>
         <div className="field"><label>Instrucciones para el Copywriter (opcional)</label><textarea value={aux.instructions} onChange={(e) => setAux({ ...aux, instructions: e.target.value })} placeholder="Ej.: más breve, tono más técnico, destacar la vida a bordo…" /></div>
         <div className="actions"><button className="btn" onClick={() => setDialog(null)}>Cancelar</button><button className="btn primary" disabled={!!busy} onClick={() => run('regen', () => api(`/publications/${id}/regenerate`, { body: { instructions: aux.instructions } }), 'Nueva versión generada')}>{busy === 'regen' ? 'Generando…' : 'Regenerar'}</button></div></Modal>}
-      {dialog === 'media' && <Modal title="Subir material propio" onClose={() => setDialog(null)}>
-        <p className="muted small">JPG, PNG, WebP, GIF o MP4 (máx. 25 MB). Solo material con autorización de uso.</p>
-        <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4" />
+      {dialog === 'media' && <Modal title="Subir archivo del reel" onClose={() => !busy && setDialog(null)}>
+        <p className="muted small">MP4 o MOV (máx. 100 MB) o imagen (máx. 25 MB). Solo material que tengas derecho a usar.</p>
+        <input ref={fileRef} type="file" accept="video/mp4,video/quicktime,image/jpeg,image/png,image/webp,image/gif" />
+        {aux.pct > 0 && <div className="bar"><i style={{ width: aux.pct + '%' }} /></div>}
         <label className="check"><input type="checkbox" checked={aux.rights} onChange={(e) => setAux({ ...aux, rights: e.target.checked })} /> Confirmo que tengo los derechos para usar este material.</label>
-        <div className="actions"><button className="btn" onClick={() => setDialog(null)}>Cancelar</button><button className="btn primary" disabled={!aux.rights || !!busy} onClick={() => { const f = fileRef.current?.files?.[0]; if (!f) return toast('Selecciona un archivo', 'err'); const fd = new FormData(); fd.set('file', f); fd.set('rightsConfirmed', 'true'); run('media', () => api(`/publications/${id}/media`, { form: fd }), 'Material subido'); }}>Subir</button></div></Modal>}
+        <div className="actions"><button className="btn" disabled={!!busy} onClick={() => setDialog(null)}>Cancelar</button><button className="btn primary" disabled={!aux.rights || !!busy} onClick={() => { const f = fileRef.current?.files?.[0]; if (!f) return toast('Selecciona un archivo', 'err'); run('media', async () => { await uploadFile(`/publications/${id}/media-file?rights=1&name=${encodeURIComponent(f.name)}`, f, (pct) => setAux((a) => ({ ...a, pct }))); setAux((a) => ({ ...a, pct: 0 })); }, 'Archivo subido'); }}>{busy === 'media' ? 'Subiendo…' : 'Subir'}</button></div></Modal>}
+      {dialog === 'original' && <Modal title="Texto original del reel" onClose={() => setDialog(null)}>
+        <div className="field"><label>Título interno (opcional)</label><input value={aux.otitle} onChange={(e) => setAux({ ...aux, otitle: e.target.value })} /></div>
+        <div className="field"><label>Caption / texto original</label><textarea style={{ minHeight: 160 }} value={aux.otext} onChange={(e) => setAux({ ...aux, otext: e.target.value })} /></div>
+        <div className="field"><label>Enlace del reel original (opcional)</label><input value={aux.ourl} onChange={(e) => setAux({ ...aux, ourl: e.target.value })} placeholder="https://www.instagram.com/reel/…" /></div>
+        <p className="muted small">Al guardar se vuelve a analizar y se genera un copy nuevo.</p>
+        <div className="actions"><button className="btn" onClick={() => setDialog(null)}>Cancelar</button><button className="btn primary" disabled={aux.otext.trim().length < 10 || !!busy} onClick={() => run('orig', () => api(`/publications/${id}/original`, { method: 'PUT', body: { title: aux.otitle, text: aux.otext, url: aux.ourl || undefined } }), 'Texto guardado y copy generado')}>{busy === 'orig' ? 'Procesando…' : 'Guardar y generar copy'}</button></div></Modal>}
+      {dialog === 'published' && <Modal title="Marcar como publicado" onClose={() => setDialog(null)}>
+        <p>Deja registro de que ya lo subiste tú desde Meta. No publica nada.</p>
+        <div className="field"><label>Nota (opcional): enlace al reel publicado, fecha, etc.</label><input value={aux.reason} onChange={(e) => setAux({ ...aux, reason: e.target.value })} /></div>
+        <div className="actions"><button className="btn" onClick={() => setDialog(null)}>Cancelar</button><button className="btn primary" disabled={!!busy} onClick={() => act('published', { reason: aux.reason }, 'Marcado como publicado')}>Confirmar</button></div></Modal>}
     </>
   );
 }

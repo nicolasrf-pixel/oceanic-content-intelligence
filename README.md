@@ -2,6 +2,15 @@
 
 Sistema editorial que monitorea fuentes de marcas náuticas, analiza cada publicación, la adapta al español de Chile y la deja lista para que una persona decida. **Nada se publica sin aprobación humana**: el sistema no tiene ninguna función de publicación en redes.
 
+## Flujo de trabajo actual (reels)
+1. Descargas los reels de las representadas con tus propias herramientas.
+2. En **Reels** → «+ Agregar reels» subes uno o varios videos (MP4/MOV, hasta 100 MB c/u), eliges la marca y confirmas los derechos. Opcional: enlace original y caption.
+3. Abres un reel, pegas o corriges el texto original («Editar») y el sistema genera el copy en español de Chile.
+4. Eliges cuál publicar («Listo para publicar»), pulsas **Descargar video** y **Copiar copy + hashtags**.
+5. Tú agregas el cierre con el logo de Oceanic y lo subes desde Meta. Luego «Marcar como publicado» deja el registro.
+
+La detección automática de nuevos reels (Instagram Business Discovery) se suma cuando haya credenciales de Meta: aparecerán en el mismo panel con su enlace y miniatura, y tú adjuntas el archivo descargado.
+
 ## Arquitectura
 
 | Capa | Tecnología |
@@ -71,6 +80,6 @@ npm test                         # pruebas unitarias
 - Los secretos no se registran en logs.
 
 ## API (resumen)
-`POST /api/auth/login` · `GET /api/health` · `GET /api/dashboard` · `GET /api/publications` (filtros: `brand, category, status, priority, from, to, q, sort`) · `GET /api/publications/:id` · `POST /api/publications/:id/action` (`approve|discard|save|reset`) · `PUT /api/publications/:id/copy` · `POST /api/publications/:id/regenerate` · `POST /api/publications/:id/media` · `POST /api/publications/manual` · `GET /api/library` · `GET|POST|PUT|DELETE /api/calendar` · `GET|POST|PUT /api/brands`, `/api/accounts` · `POST /api/monitor/run` · `POST /api/monitor/reprocess` · `GET /api/logs?type=monitoring|agents|audit` · `GET|PUT /api/settings`.
+`POST /api/auth/login` · `GET /api/health` · `GET /api/dashboard` · `GET /api/publications` (filtros: `brand, category, status, priority, from, to, q, sort`) · `GET /api/publications/:id` · `POST /api/publications/:id/action` (`approve|discard|save|reset`) · `PUT /api/publications/:id/copy` · `POST /api/publications/:id/regenerate` · `POST /api/publications/:id/media` · `POST /api/publications/manual` · `POST /api/reels` · `PUT /api/publications/:id/original` · `POST /api/publications/:id/media-file` (subida en streaming) · `GET /api/publications/:id/media[?download=1]` · `GET /api/library` · `GET|POST|PUT|DELETE /api/calendar` · `GET|POST|PUT /api/brands`, `/api/accounts` · `POST /api/monitor/run` · `POST /api/monitor/reprocess` · `GET /api/logs?type=monitoring|agents|audit` · `GET|PUT /api/settings`.
 
 Estado de avance y pendientes: ver `IMPLEMENTATION_STATUS.md`.

@@ -9,6 +9,11 @@
 - Monitoreo **real** contra beneteau.com y catamarans-lagoon.com: 8 artículos con imagen, fecha y reparto Beneteau Vela/Power.
 - Interfaz revisada en navegador (escritorio y móvil, sin desborde horizontal).
 
+## Panel de reels (2026-11-24)
+- Página **Reels**: subida múltiple con progreso, filtros por estado/marca/texto, reproducción en el panel (soporta Range), descarga con nombre de marca, copiar copy+hashtags, estado «Publicado por mí» (solo registro).
+- Subida en streaming a R2 (sin cargar el archivo en memoria); límite 100 MB por video (límite de solicitud de Workers).
+- Probado en local con videos reales y en navegador. No se probó aún con la IA real.
+
 ## NO verificado todavía
 - Despliegue real en Cloudflare (D1/R2 remotos, cron en producción).
 - Llamadas a un proveedor de IA real (solo probado con API simulada). Los copies reales en español de Chile deben revisarse con el usuario.
