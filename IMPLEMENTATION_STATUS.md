@@ -15,8 +15,8 @@
 - Conector de Instagram (requiere credenciales Meta; sin ellas queda en espera).
 - Cron: lógica de hora de Santiago probada con pruebas unitarias, no en producción.
 
-## Datos semilla: incompleto
-El resumen original mencionaba **11 líneas comerciales y 10 cuentas de Instagram**, pero ese listado no se conservó. `seed/seed.sql` incluye solo lo confirmado en el MVP 0.1: Beneteau Vela, Beneteau Power, Lagoon y Axopar (cuentas `beneteau_official`, `lagooncatamarans`, `axopar`) más los sitios beneteau.com y catamarans-lagoon.com. Las demás marcas y cuentas se agregan desde «Monitor de marcas» o en el seed cuando se entregue el listado.
+## Datos semilla
+Quedaron sembradas las 11 líneas comerciales y 10 cuentas de Instagram del listado del cliente (Beneteau Vela y Power comparten `@beneteau_official`). Además hay fuentes web verificadas para Beneteau, Lagoon, Excess, Axopar y Aquila. Solaris (dominio no resuelto), Saffier (bloquea bots, 403), XO Boats, VX One y Switch One Design no exponen noticias legibles: quedan solo con Instagram, que requiere credenciales de Meta.
 
 ## Pasos en la nube (pendientes)
 1. Crear D1 `oceanic-content-db` y R2 `oceanic-content-media`; poner `database_id` en `wrangler.toml`; migrar y sembrar en remoto.
