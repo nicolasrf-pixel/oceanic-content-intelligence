@@ -20,7 +20,7 @@ La detección automática de nuevos reels (Instagram Business Discovery) se suma
 | Datos | Cloudflare D1 (`migrations/`) |
 | Medios propios | Cloudflare R2, solo con confirmación de derechos |
 | Automatización | Cron Trigger horario; el Worker decide si toca correr según la hora de Santiago configurada |
-| IA | Anthropic u OpenAI-compatible; sin `AI_API_KEY` funciona en modo heurístico |
+| IA | Anthropic/OpenAI (con `AI_API_KEY`) o **Workers AI de Cloudflare** (sin clave externa); sin ninguno, modo heurístico |
 
 ### Agentes (`src/agents/`)
 - **Scout**: separa publicaciones nuevas de duplicadas (id externo, URL canónica y hash de contenido, incluso entre cuentas).
@@ -29,12 +29,16 @@ La detección automática de nuevos reels (Instagram Business Discovery) se suma
 - **Editor**: controles deterministas (voseo, vosotros, léxico, cifras que no están en el original, largo) + revisión por IA de ortografía, gramática, coherencia y exactitud. Una cifra inventada o un voseo bloquean.
 - **Coordinador**: orquesta el flujo, candado contra ejecuciones simultáneas, reintentos con backoff, límites por cuenta y por ejecución.
 
+### Motor de IA y traductor
+Prioridad: `AI_API_KEY` (Anthropic/OpenAI) > Workers AI (binding `AI`, modelo Llama 3.3 70B, configurable con `WORKERS_AI_MODEL`) > modo heurístico. Los textos que no están en español se traducen de forma literal con `m2m100` (Workers AI) y se muestran como «Traducción literal» solo de referencia. El cron reprocesa cada día lo que quedó sin IA. Workers AI tiene cuota gratuita diaria; sobre ella se cobra.
+
 ### Modo sin IA (honesto)
 Sin `AI_API_KEY` el Curador puntúa por reglas y el Copywriter solo ajusta tuteo/léxico **si el original ya está en español**. Si está en inglés o francés **no traduce ni inventa**: deja el copy marcado «PENDIENTE DE ADAPTACIÓN CON IA» y no permite aprobarlo. Al configurar la IA, «Reprocesar con IA» (Monitor de marcas) rehace esos copies.
 
 ### Conectores (`src/connectors/`)
-- `html_news`: sitios públicos de noticias; respeta `robots.txt`, valida SSRF, filtra páginas de sección y toma imagen/fecha.
+- `html_news`: sitios públicos de noticias; respeta `robots.txt`, valida SSRF, filtra índices/etiquetas/paginación y toma imagen/fecha. Si el sitio bloquea las IP del Worker (403/404), reintenta a través de un lector público (`r.jina.ai`, solo recibe URLs públicas de las marcas); también se puede forzar con `viaReader`. No se evaden CAPTCHAs ni desafíos anti-bot.
 - `rss`: feeds RSS/Atom.
+- `youtube_api`: videos y Shorts de canales de YouTube con la API oficial (`YOUTUBE_API_KEY`, gratuita). Los feeds RSS de YouTube no se usan porque su `robots.txt` los prohíbe.
 - `instagram_discovery`: Instagram Business Discovery con una cuenta profesional propia autorizada (`META_ACCESS_TOKEN`, `META_IG_USER_ID`). Sin credenciales queda «Requiere credenciales»; **no se hace scraping de Instagram**.
 - Manual: URL o texto pegado desde la app. Los enlaces a redes sociales exigen pegar el texto.
 

@@ -3,7 +3,7 @@ import { api } from '../api';
 import { Empty, fmtDate, Loading, Modal, useAsync, useToast } from '../ui';
 
 const STATUS: Record<string, [string, string]> = { ok: ['Conectado', 'ok'], needs_credentials: ['Requiere credenciales', 'warn'], blocked_robots: ['robots.txt lo bloquea', 'warn'], error: ['Con error', 'err'] };
-const CONNECTORS: Record<string, string> = { html_news: 'Sitio web / noticias', rss: 'RSS / Atom', instagram_discovery: 'Instagram (Business Discovery)' };
+const CONNECTORS: Record<string, string> = { html_news: 'Sitio web / noticias', rss: 'RSS / Atom', instagram_discovery: 'Instagram (Business Discovery)', youtube_api: 'YouTube (API oficial)' };
 
 function AccountForm({ brandId, account, onClose, onSaved }: { brandId: string; account?: any; onClose: () => void; onSaved: () => void }) {
   const toast = useToast();
@@ -17,12 +17,12 @@ function AccountForm({ brandId, account, onClose, onSaved }: { brandId: string; 
       toast('Fuente guardada'); onSaved(); onClose();
     } catch (e) { toast((e as Error).message, 'err'); }
   };
-  const ig = f.connector === 'instagram_discovery';
+  const ig = f.connector === 'instagram_discovery' || f.connector === 'youtube_api';
   return (
     <Modal title={account ? 'Configurar fuente' : 'Nueva fuente'} onClose={onClose}>
       {!account && <div className="field"><label>Tipo de conector</label><select value={f.connector} onChange={(e) => setF({ ...f, connector: e.target.value })}>{Object.entries(CONNECTORS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></div>}
-      <div className="field"><label>{ig ? 'URL del perfil de Instagram' : 'URL de la fuente (https)'}</label><input value={f.url} onChange={(e) => setF({ ...f, url: e.target.value })} /></div>
-      {ig && <div className="field"><label>Handle (sin @)</label><input value={f.handle} onChange={(e) => setF({ ...f, handle: e.target.value })} /></div>}
+      <div className="field"><label>{f.connector === 'youtube_api' ? 'URL del canal de YouTube (…/channel/UC…)' : ig ? 'URL del perfil de Instagram' : 'URL de la fuente (https)'}</label><input value={f.url} onChange={(e) => setF({ ...f, url: e.target.value })} /></div>
+      {f.connector === 'instagram_discovery' && <div className="field"><label>Handle (sin @)</label><input value={f.handle} onChange={(e) => setF({ ...f, handle: e.target.value })} /></div>}
       {!ig && <>
         <div className="field"><label>URL del listado de noticias (opcional)</label><input value={f.listUrl} onChange={(e) => setF({ ...f, listUrl: e.target.value })} placeholder="https://www.ejemplo.com/news" /></div>
         {f.connector === 'html_news' && <div className="field"><label>Patrón de enlaces de artículos (regex sobre la ruta)</label><input value={f.linkPattern} onChange={(e) => setF({ ...f, linkPattern: e.target.value })} placeholder="/(news|blog|press)" /></div>}

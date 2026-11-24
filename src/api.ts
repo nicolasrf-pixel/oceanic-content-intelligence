@@ -53,7 +53,7 @@ route('GET', '/api/health', async ({ env }) => {
   let llm: ReturnType<typeof getLlm> = null; try { llm = getLlm(env); } catch { /* config inválida */ }
   return json({ ok: db, db, r2: Boolean(env.MEDIA), authConfigured: Boolean(env.ADMIN_AUTH_SECRET && env.ADMIN_AUTH_SECRET.length >= 12),
     ai: { mode: llm ? 'ia' : 'heuristico', provider: llm?.provider ?? null, model: llm?.model ?? null },
-    instagram: { configured: Boolean(env.META_ACCESS_TOKEN && env.META_IG_USER_ID) }, version: '1.0.0', time: nowIso() });
+    instagram: { configured: Boolean(env.META_ACCESS_TOKEN && env.META_IG_USER_ID) }, youtube: { configured: Boolean(env.YOUTUBE_API_KEY) }, workersAi: Boolean(env.AI), version: '1.0.0', time: nowIso() });
 }, false);
 
 route('POST', '/api/auth/login', async ({ req, env }) => {
@@ -357,13 +357,14 @@ route('PUT', '/api/brands/:id', async ({ req, env, params }) => {
   return json({ ok: true });
 });
 
-const CONNECTOR_PLATFORM: Record<string, string> = { instagram_discovery: 'instagram', html_news: 'web', rss: 'rss' };
+const CONNECTOR_PLATFORM: Record<string, string> = { instagram_discovery: 'instagram', html_news: 'web', rss: 'rss', youtube_api: 'youtube' };
 function validateAccountInput(b: any, partial: boolean) {
   const out: Record<string, unknown> = {};
   if (!partial || b.connector !== undefined) { if (!CONNECTOR_PLATFORM[str(b.connector, 40)]) throw new HttpError(400, 'Conector no válido'); out.connector = str(b.connector, 40); }
   if (b.url !== undefined || !partial) {
     const url = str(b.url, 2000);
     if (out.connector === 'instagram_discovery' || (partial && url.includes('instagram.com'))) { if (!/^https:\/\/(www\.)?instagram\.com\//.test(url)) throw new HttpError(400, 'URL de Instagram inválida'); }
+    else if (out.connector === 'youtube_api') { if (!/^https:\/\/(www\.)?youtube\.com\//.test(url)) throw new HttpError(400, 'URL de YouTube inválida'); }
     else assertPublicHttpsUrl(url);
     out.url = url;
   }
@@ -372,7 +373,7 @@ function validateAccountInput(b: any, partial: boolean) {
     if (c.listUrl) assertPublicHttpsUrl(String(c.listUrl));
     if (c.linkPattern) { try { new RegExp(String(c.linkPattern)); } catch { throw new HttpError(400, 'linkPattern no es una expresión regular válida'); } }
     for (const h of c.allowedHosts ?? []) if (!/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(String(h))) throw new HttpError(400, `Dominio permitido inválido: ${h}`);
-    out.config_json = JSON.stringify({ lines: c.lines, listUrl: c.listUrl, linkPattern: c.linkPattern, allowedHosts: c.allowedHosts, maxItems: c.maxItems ? Math.min(Number(c.maxItems) || 5, 10) : undefined });
+    out.config_json = JSON.stringify({ lines: c.lines, listUrl: c.listUrl, linkPattern: c.linkPattern, allowedHosts: c.allowedHosts, maxItems: c.maxItems ? Math.min(Number(c.maxItems) || 5, 10) : undefined, viaReader: c.viaReader === true ? true : undefined, channelId: typeof c.channelId === 'string' && /^UC[A-Za-z0-9_-]{22}$/.test(c.channelId) ? c.channelId : undefined });
   }
   if (b.handle !== undefined) out.handle = str(b.handle, 60).replace(/^@/, '') || null;
   return out;

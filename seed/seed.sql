@@ -35,6 +35,20 @@ INSERT OR IGNORE INTO social_accounts (id,brand_id,platform,handle,url,connector
 ('web-axopar','axopar','web',NULL,'https://www.axopar.com/','html_news','{"listUrl":"https://www.axopar.com/discover-axopar/adventure-stories/","linkPattern":"/adventure-stories/","maxItems":5}',1,'public_site_robots_respected'),
 ('web-aquila','aquila','web',NULL,'https://www.aquilaboats.com/','html_news','{"listUrl":"https://www.aquilaboats.com/news","linkPattern":"/news","maxItems":5}',1,'public_site_robots_respected');
 
+-- Fuentes adicionales: sitios leidos mediante lector (bloquean las IP del Worker) y canales de YouTube (API oficial; requieren YOUTUBE_API_KEY)
+INSERT OR IGNORE INTO social_accounts (id,brand_id,platform,handle,url,connector,config_json,enabled,permission_status) VALUES
+('web-saffier','saffier','web',NULL,'https://saffieryachts.com/','html_news','{"listUrl":"https://saffieryachts.com/news/","linkPattern":"/news/","viaReader":true,"maxItems":5}',0,'blocked_by_bot_protection'),
+('web-solaris','solaris','web',NULL,'https://www.solarisyachts.com/','html_news','{"listUrl":"https://www.solarisyachts.com/social-press/","linkPattern":"/social-press/","viaReader":true,"maxItems":5}',0,'blocked_by_bot_protection'),
+('yt-beneteau','beneteau-sail','youtube',NULL,'https://www.youtube.com/channel/UCD32lcECDXD-Mz9rgvM03kg','youtube_api','{"channelId":"UCD32lcECDXD-Mz9rgvM03kg","lines":["beneteau-sail","beneteau-power"]}',0,'requires_youtube_api_key'),
+('yt-lagoon','lagoon','youtube',NULL,'https://www.youtube.com/channel/UCWVdVCBpjeIGtaJGgjyiT6g','youtube_api','{"channelId":"UCWVdVCBpjeIGtaJGgjyiT6g"}',0,'requires_youtube_api_key'),
+('yt-excess','excess','youtube',NULL,'https://www.youtube.com/channel/UCO34DHosUJF0wTca8753dWg','youtube_api','{"channelId":"UCO34DHosUJF0wTca8753dWg"}',0,'requires_youtube_api_key'),
+('yt-axopar','axopar','youtube',NULL,'https://www.youtube.com/channel/UCj4w0PCww50DFgGWzWAxHog','youtube_api','{"channelId":"UCj4w0PCww50DFgGWzWAxHog"}',0,'requires_youtube_api_key'),
+('yt-aquila','aquila','youtube',NULL,'https://www.youtube.com/channel/UC3Q63RytuJYI032le906OHw','youtube_api','{"channelId":"UC3Q63RytuJYI032le906OHw"}',0,'requires_youtube_api_key'),
+('yt-vxone','vx-one','youtube',NULL,'https://www.youtube.com/channel/UCQ7jabBQXslYjwUVpVV25uQ','youtube_api','{"channelId":"UCQ7jabBQXslYjwUVpVV25uQ"}',0,'requires_youtube_api_key'),
+('yt-xo','xo-boats','youtube',NULL,'https://www.youtube.com/channel/UCtSC_ZfoBER0t0frRh-x4vA','youtube_api','{"channelId":"UCtSC_ZfoBER0t0frRh-x4vA"}',0,'requires_youtube_api_key'),
+('yt-switch','switch-one-design','youtube',NULL,'https://www.youtube.com/channel/UCNJ-uuXXYwhd24P_Lc489ZQ','youtube_api','{"channelId":"UCNJ-uuXXYwhd24P_Lc489ZQ"}',0,'requires_youtube_api_key'),
+('yt-saffier','saffier','youtube',NULL,'https://www.youtube.com/channel/UC5WYh-om7mbw4KYRpfKcHNA','youtube_api','{"channelId":"UC5WYh-om7mbw4KYRpfKcHNA"}',0,'requires_youtube_api_key');
+
 INSERT OR IGNORE INTO settings (key,value) VALUES
 ('monitoring_enabled','1'),
 ('monitoring_hours_local','8'),

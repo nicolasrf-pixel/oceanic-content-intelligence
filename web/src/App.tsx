@@ -68,7 +68,7 @@ function Shell({ email, onLogout }: { email: string; onLogout: () => void }) {
         <a className="brand" href="#/panel"><span className="brand-mark">O</span><div><strong>OCEANIC</strong><small>CONTENT INTELLIGENCE</small></div></a>
         <nav>{NAV.map(([k, label, ico]) => <a key={k} href={`#/${k}`} className={current === k || (k === 'panel' && !NAV.some(n => n[0] === current)) ? 'active' : ''} onClick={() => setOpen(false)}><span>{ico}</span>{label}</a>)}</nav>
         <div className="side-bottom">
-          <div className="ai-state"><i className={health.data?.ai.mode === 'ia' ? 'dot ok' : 'dot warn'} /><div><strong>{health.data?.ai.mode === 'ia' ? `IA activa` : 'Modo heurístico'}</strong><small>{health.data?.ai.mode === 'ia' ? `${health.data.ai.provider} · ${health.data.ai.model}` : 'Sin AI_API_KEY configurada'}</small></div></div>
+          <div className="ai-state"><i className={health.data?.ai.mode === 'ia' ? 'dot ok' : 'dot warn'} /><div><strong>{health.data?.ai.mode === 'ia' ? (health.data.ai.provider === 'workers-ai' ? 'IA de Cloudflare activa' : 'IA activa') : 'Modo heurístico'}</strong><small>{health.data?.ai.mode === 'ia' ? `${health.data.ai.provider} · ${health.data.ai.model}` : 'Sin AI_API_KEY configurada'}</small></div></div>
           <div className="user"><span className="avatar">{email[0]?.toUpperCase()}</span><div><strong>{email}</strong><button className="link" onClick={onLogout}>Cerrar sesión</button></div></div>
         </div>
       </aside>

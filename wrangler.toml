@@ -23,6 +23,10 @@ database_name = "oceanic-content-db"
 database_id = "5ca03ed6-a548-4f40-bbd3-088305252414"
 migrations_dir = "migrations"
 
+# Workers AI: motor de IA y traductor incluidos en Cloudflare (no requiere clave externa).
+[ai]
+binding = "AI"
+
 [[r2_buckets]]
 binding = "MEDIA"
 bucket_name = "oceanic-content-media"
@@ -32,4 +36,4 @@ bucket_name = "oceanic-content-media"
 [triggers]
 crons = ["0 * * * *"]
 
-# Secretos (NO van aqui): wrangler secret put ADMIN_AUTH_SECRET | AI_API_KEY | META_ACCESS_TOKEN | META_IG_USER_ID
+# Secretos (NO van aqui): wrangler secret put ADMIN_AUTH_SECRET | AI_API_KEY (opcional) | META_ACCESS_TOKEN | META_IG_USER_ID | YOUTUBE_API_KEY (opcionales)

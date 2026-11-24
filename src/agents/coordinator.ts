@@ -3,6 +3,7 @@ import { CONNECTORS } from '../connectors';
 import type { RobotsCache } from '../lib/robots';
 import { exec, getSettings, one, q } from '../lib/db';
 import { detectLang } from '../lib/html';
+import { translateToSpanish } from '../lib/translate';
 import { nowIso, priorityFor, uid, withRetry } from '../lib/util';
 import { curate } from './curator';
 import { writeCopy } from './copywriter';
@@ -56,8 +57,15 @@ export async function processPublication(ctx: AgentCtx, pubId: string, o: { feed
     await exec(env, `UPDATE publications SET category=?, score=?, priority=?, brand_id=?, updated_at=? WHERE id=?`, a.category, a.score, priorityFor(a.score), a.brandId, nowIso(), pub.id);
   }
 
-  // Copywriter -> Editor, con una vuelta de corrección si el Editor encuentra errores bloqueantes.
+  // Traducción literal de referencia (Workers AI) para que el editor lea el original en español.
   const source = `${pub.title ?? ''}\n${pub.original_text}`;
+  const lang = detectLang(source);
+  if (!pub.original_es && lang !== 'es' && lang !== 'other') {
+    const tr = await translateToSpanish(env, `${pub.title ? pub.title + '\n\n' : ''}${pub.original_text}`, lang);
+    if (tr) await exec(env, 'UPDATE publications SET original_es = ? WHERE id = ?', tr, pub.id);
+  }
+
+  // Copywriter -> Editor, con una vuelta de corrección si el Editor encuentra errores bloqueantes.
   let draft = await writeCopy(ctx, pub, brand, { category, toneGuide: settings.tone_guide, feedback: o.feedback });
   let report = await reviewCopy(ctx, pub, draft.copy, draft.needsAi);
   if (hasBlocking(report.issues) && ctx.llm && !draft.needsAi) {

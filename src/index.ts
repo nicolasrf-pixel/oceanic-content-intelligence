@@ -1,6 +1,7 @@
 import type { Env } from './types';
 import { handleApi } from './api';
-import { runMonitoring, shouldRunNow } from './agents/coordinator';
+import { reprocess, runMonitoring, shouldRunNow } from './agents/coordinator';
+import { getLlm } from './agents/llm';
 import { getSettings } from './lib/db';
 
 const SECURITY_HEADERS: Record<string, string> = {
@@ -29,6 +30,9 @@ export default {
       const s = await getSettings(env);
       if (s.monitoring_enabled !== '1' || !shouldRunNow(s.monitoring_hours_local)) return;
       await runMonitoring(env, { trigger: 'cron' });
+      // Si hay IA disponible, rehace lo que quedó con copy heurístico o sin procesar (nunca toca copies editados a mano).
+      let llm = null; try { llm = getLlm(env); } catch { /* sin IA */ }
+      if (llm) { await reprocess(env, { scope: 'failed', limit: 10 }); await reprocess(env, { scope: 'heuristic', limit: 10 }); }
     })());
   },
 } satisfies ExportedHandler<Env>;

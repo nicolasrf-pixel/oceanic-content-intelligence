@@ -14,6 +14,13 @@
 - Subida en streaming a R2 (sin cargar el archivo en memoria); límite 100 MB por video (límite de solicitud de Workers).
 - Probado en local con videos reales y en navegador. No se probó aún con la IA real.
 
+## Fuentes y traducción (2026-11-24)
+- Filtro de índices: se excluyen `/tag/`, `/page/`, `/category/`, `/author/`, feeds, y páginas `og:type=blog` (caso Aquila).
+- Lectura de respaldo mediante lector para sitios que bloquean al Worker (caso Lagoon, verificado en local).
+- Workers AI como motor y traductor sin clave externa; **no se pudo probar en local** (el binding solo corre en Cloudflare). Se valida tras el despliegue vía cron.
+- **Sin lectura automática posible:** Solaris (CAPTCHA), Saffier (desafío anti-bot, sus noticias no aparecen como enlaces), XO Boats, VX One, Switch One Design (sin sección de noticias legible). Quedan desactivadas o solo con Instagram/YouTube.
+- YouTube: canales resueltos para 9 marcas (falta Solaris); conector con API oficial listo, en espera de `YOUTUBE_API_KEY`.
+
 ## NO verificado todavía
 - Despliegue real en Cloudflare (D1/R2 remotos, cron en producción).
 - Llamadas a un proveedor de IA real (solo probado con API simulada). Los copies reales en español de Chile deben revisarse con el usuario.

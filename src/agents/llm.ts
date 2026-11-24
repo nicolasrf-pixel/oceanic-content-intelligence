@@ -8,10 +8,29 @@ export interface LlmClient {
   complete(system: string, user: string, opts?: { maxTokens?: number }): Promise<LlmResult>;
 }
 
-/** Devuelve null si no hay AI_API_KEY: los agentes caen a modo heurístico sin inventar contenido. */
+export const DEFAULT_WORKERS_AI_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+
+/** Motor de IA incluido en Cloudflare (Workers AI): no requiere clave externa. */
+function workersAi(env: Env): LlmClient {
+  const model = env.WORKERS_AI_MODEL || DEFAULT_WORKERS_AI_MODEL;
+  return {
+    provider: 'workers-ai', model,
+    complete: (system, user, o) => withRetry(async () => {
+      try {
+        const r: any = await (env.AI as any).run(model, { messages: [{ role: 'system', content: system }, { role: 'user', content: user }], max_tokens: o?.maxTokens ?? 1500, temperature: 0.3 });
+        const out = r?.response ?? r?.result?.response ?? '';
+        const text = typeof out === 'string' ? out : JSON.stringify(out);
+        if (!text.trim()) throw new Error('respuesta vacía');
+        return { text, inputTokens: r?.usage?.prompt_tokens, outputTokens: r?.usage?.completion_tokens };
+      } catch (e) { throw new RetryableError(`Workers AI: ${(e as Error).message}`); }
+    }, { attempts: 2, baseMs: 1500 }),
+  };
+}
+
+/** Prioridad: clave externa (Anthropic/OpenAI) > Workers AI > null (modo heurístico). */
 export function getLlm(env: Env): LlmClient | null {
   const key = env.AI_API_KEY?.trim();
-  if (!key) return null;
+  if (!key) return env.AI ? workersAi(env) : null;
   const provider = (env.AI_PROVIDER || 'anthropic').toLowerCase();
 
   if (provider === 'anthropic') {

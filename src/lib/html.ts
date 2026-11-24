@@ -36,7 +36,7 @@ export function getPublishedAt(html: string): string | undefined {
   return undefined;
 }
 
-const BOILERPLATE = /(language choice|cookie|accept all|newsletter|subscribe|privacy|all rights reserved|©|share (on|this)|follow us|read more|sign up)/i;
+export const BOILERPLATE = /(language choice|cookie|accept all|newsletter|subscribe|privacy|all rights reserved|©|share (on|this)|follow us|read more|sign up)/i;
 
 export function extractMainText(html: string): string {
   let h = html.replace(/<(script|style|noscript|svg|nav|header|footer|aside|form|iframe)[\s\S]*?<\/\1>/gi, ' ').replace(/<!--[\s\S]*?-->/g, ' ');
@@ -55,22 +55,29 @@ export function extractLinks(html: string, base: string): string[] {
   return [...out];
 }
 
-export function detectLang(text: string): 'es' | 'en' | 'fr' | 'other' {
-  const w = text.toLowerCase().match(/[a-záéíóúñàâçèêëîïôùûü']+/g) ?? [];
+export type Lang = 'es' | 'en' | 'fr' | 'it' | 'nl' | 'fi' | 'de' | 'pt' | 'other';
+const STOP: Record<Exclude<Lang, 'other'>, string[]> = {
+  es: ['el', 'la', 'los', 'las', 'de', 'que', 'y', 'en', 'un', 'una', 'con', 'para', 'por', 'del', 'es', 'su', 'se', 'al'],
+  en: ['the', 'and', 'of', 'to', 'in', 'is', 'for', 'with', 'on', 'that', 'this', 'are', 'from', 'by', 'it', 'as', 'at'],
+  fr: ['le', 'la', 'les', 'des', 'et', 'est', 'une', 'un', 'du', 'pour', 'dans', 'avec', 'sur', 'qui', 'au', 'en', 'que'],
+  it: ['il', 'di', 'che', 'e', 'per', 'con', 'una', 'del', 'nel', 'sono', 'è', 'della', 'degli', 'alla', 'più', 'non', 'le'],
+  nl: ['de', 'het', 'een', 'en', 'van', 'voor', 'met', 'op', 'is', 'dat', 'zijn', 'te', 'ook', 'naar', 'bij'],
+  fi: ['ja', 'on', 'että', 'ei', 'se', 'kun', 'tai', 'oli', 'ovat', 'mutta', 'myös', 'sekä', 'kaikki', 'sen'],
+  de: ['der', 'die', 'das', 'und', 'ist', 'nicht', 'mit', 'für', 'auf', 'ein', 'eine', 'den', 'dem', 'von', 'zu'],
+  pt: ['o', 'os', 'as', 'de', 'que', 'e', 'para', 'com', 'uma', 'um', 'não', 'em', 'do', 'da', 'se'],
+};
+export function detectLang(text: string): Lang {
+  const w = text.toLowerCase().match(/[a-záéíóúñàâçèêëîïôùûüäöåõãò']+/g) ?? [];
   if (w.length < 6) return 'other';
-  const sets = {
-    es: ['el', 'la', 'los', 'las', 'de', 'que', 'y', 'en', 'un', 'una', 'con', 'para', 'por', 'del', 'es', 'su'],
-    en: ['the', 'and', 'of', 'to', 'in', 'is', 'for', 'with', 'on', 'that', 'this', 'are', 'from', 'by'],
-    fr: ['le', 'la', 'les', 'des', 'et', 'est', 'une', 'un', 'du', 'pour', 'dans', 'avec', 'sur', 'qui', 'au'],
-  };
-  const score = (k: keyof typeof sets) => w.filter((x) => sets[k].includes(x)).length;
-  const s = { es: score('es'), en: score('en'), fr: score('fr') };
-  const best = (Object.keys(s) as (keyof typeof s)[]).sort((a, b) => s[b] - s[a])[0];
-  return s[best] / w.length < 0.08 ? 'other' : best;
+  const keys = Object.keys(STOP) as Exclude<Lang, 'other'>[];
+  const score = (k: Exclude<Lang, 'other'>) => w.filter((x) => STOP[k].includes(x)).length;
+  const ranked = keys.map((k) => [k, score(k)] as const).sort((a, b) => b[1] - a[1]);
+  const [best, n] = ranked[0];
+  return n / w.length < 0.08 || n === (ranked[1]?.[1] ?? -1) ? 'other' : best;
 }
 
-const IMG_SKIP = /(logo|icon|sprite|avatar|placeholder|pixel|blank|flag|\.svg|\.gif|data:)/i;
-const IMG_EXT = /\.(jpe?g|png|webp)(\.webp)?(\?|$)/i;
+export const IMG_SKIP = /(logo|icon|sprite|avatar|placeholder|pixel|blank|flag|\.svg|\.gif|data:)/i;
+export const IMG_EXT = /\.(jpe?g|png|webp)(\.webp)?(\?|$)/i;
 
 /** Primera imagen de contenido (fuera de menús/cabeceras) cuando la página no declara og:image. */
 export function firstContentImage(html: string, base: string): string | undefined {

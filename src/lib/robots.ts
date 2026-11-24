@@ -1,4 +1,5 @@
 import { BOT_UA, safeFetch } from './safe-fetch';
+import { readerFetch } from './reader';
 
 interface Rule { allow: boolean; pattern: string }
 export type RobotsCache = Map<string, Rule[] | 'deny_all' | 'allow_all'>;
@@ -42,18 +43,24 @@ export function pathAllowed(rules: Rule[], path: string): boolean {
 }
 
 /** Devuelve true si BOT_UA puede leer la URL. 4xx en robots => permitido; 5xx/red => denegado (criterio conservador). */
-export async function robotsAllows(rawUrl: string, cache: RobotsCache): Promise<boolean> {
+export async function robotsAllows(rawUrl: string, cache: RobotsCache, via: 'direct' | 'reader' = 'direct'): Promise<boolean> {
   const u = new URL(rawUrl);
   const origin = u.origin;
-  let entry = cache.get(origin);
+  const key = `${via}:${origin}`;
+  let entry = cache.get(key);
   if (!entry) {
     try {
-      const r = await safeFetch(`${origin}/robots.txt`, { accept: 'text/plain', timeoutMs: 6000, maxBytes: 300_000 });
-      entry = r.status >= 400 ? 'allow_all' : parseRobots(r.text);
+      if (via === 'reader') {
+        const r = await readerFetch(`${origin}/robots.txt`);
+        entry = r.ok && /user-agent/i.test(r.markdown) ? parseRobots(r.markdown) : 'allow_all';
+      } else {
+        const r = await safeFetch(`${origin}/robots.txt`, { accept: 'text/plain', timeoutMs: 6000, maxBytes: 300_000 });
+        entry = r.status >= 400 ? 'allow_all' : parseRobots(r.text);
+      }
     } catch {
       entry = 'deny_all';
     }
-    cache.set(origin, entry);
+    cache.set(key, entry);
   }
   if (entry === 'allow_all') return true;
   if (entry === 'deny_all') return false;

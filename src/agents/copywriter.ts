@@ -32,7 +32,7 @@ export function heuristicDraft(pub: Pick<PubRow, 'title' | 'original_text'>, bra
     return { copy: neutralizeLexicon(toTuteo(excerpt(pub.original_text))), hashtags: tags, provider: 'heuristic', model: null, needsAi: false, source: 'heuristic' };
   }
   return {
-    copy: `[PENDIENTE DE ADAPTACIÓN CON IA — texto original en ${lang === 'other' ? 'otro idioma' : lang === 'en' ? 'inglés' : 'francés'}]\n${excerpt(pub.original_text, 500)}`,
+    copy: `[PENDIENTE DE ADAPTACIÓN CON IA — texto original en ${({ en: 'inglés', fr: 'francés', it: 'italiano', nl: 'neerlandés', fi: 'finés', de: 'alemán', pt: 'portugués' } as Record<string, string>)[lang] ?? 'otro idioma'}]\n${excerpt(pub.original_text, 500)}`,
     hashtags: tags, provider: 'heuristic', model: null, needsAi: true, source: 'heuristic',
   };
 }

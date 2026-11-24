@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { lintChileanSpanish, neutralizeLexicon, toTuteo, unsupportedNumbers } from '../src/lib/chilean';
 import { assertPublicHttpsUrl, hostAllowed, isBlockedHost } from '../src/lib/safe-fetch';
 import { parseRobots, pathAllowed } from '../src/lib/robots';
@@ -147,5 +147,82 @@ describe('agentes (modo heurístico)', () => {
     expect(shouldRunNow('8', new Date('2026-12-15T12:00:00Z'))).toBe(false);
     expect(shouldRunNow('8', new Date('2026-07-15T12:00:00Z'))).toBe(true);   // invierno UTC-4
     expect(shouldRunNow('8,18', new Date('2026-12-15T21:00:00Z'))).toBe(true);
+  });
+});
+
+import { isArticleCandidate } from '../src/connectors/html-news';
+import { chunkParagraphs, translateToSpanish } from '../src/lib/translate';
+import { linksFromMarkdown, markdownToText, parseReader, firstImageFromMarkdown } from '../src/lib/reader';
+import { getLlm } from '../src/agents/llm';
+import { youtubeConnector } from '../src/connectors/youtube';
+
+describe('filtro de artículos (caso Aquila)', () => {
+  const pat = /\/news/i;
+  it('excluye etiquetas, paginación y archivos', () => {
+    for (const p of ['/news/tag/awards-recognition', '/news/page/2', '/news/category/x', '/news/author/pepe', '/news/feed/'])
+      expect(isArticleCandidate(new URL('https://www.aquilaboats.com' + p), pat)).toBe(false);
+    expect(isArticleCandidate(new URL('https://www.aquilaboats.com/news/aquila-expands-nordic-presence'), pat)).toBe(true);
+  });
+  it('og:type blog (índice) no es artículo; article sí', () => {
+    expect(looksLikeArticle('https://www.aquilaboats.com/news', undefined, 'blog')).toBe(false);
+    expect(looksLikeArticle('https://x.com/news/corto', undefined, 'article')).toBe(true);
+  });
+});
+
+describe('lector y Markdown', () => {
+  const raw = 'Title: Nueva noticia\n\nURL Source: https://a.com/news/x\n\nPublished Time: 2026-11-10T10:00:00Z\n\nMarkdown Content:\n*   [Go to menu](https://a.com#m)\n![Image 1: logo](https://a.com/logo.svg)\n![Image 2: hero](https://a.com/img/hero.jpg)\n\nEste es un párrafo largo de la noticia con [un enlace](https://a.com/y) que debe quedar como texto.\n\nPlease confirm your language choice.\n';
+  it('parsea cabeceras, texto, imágenes y enlaces', () => {
+    const p = parseReader(raw, 'https://a.com/news/x');
+    expect(p.ok).toBe(true); expect(p.title).toBe('Nueva noticia'); expect(p.publishedAt).toBe('2026-11-10T10:00:00.000Z');
+    const t = markdownToText(p.markdown);
+    expect(t).toContain('un enlace que debe quedar como texto'); expect(t).not.toMatch(/language choice|Go to menu/);
+    expect(firstImageFromMarkdown(p.markdown)).toBe('https://a.com/img/hero.jpg');
+    expect(linksFromMarkdown(p.markdown)).toContain('https://a.com/y');
+  });
+  it('detecta error 404 del lector', () => {
+    expect(parseReader('Title: x\n\nWarning: Target URL returned error 404: Not Found\n\nMarkdown Content:\n', 'https://a.com').ok).toBe(false);
+  });
+});
+
+describe('traductor y Workers AI', () => {
+  it('trocea por párrafos sin pasar el máximo', () => {
+    const t = chunkParagraphs(('Una oración de prueba bastante larga. ').repeat(60) + '\n\nOtro párrafo corto.', 300);
+    expect(t.every((c) => c.length <= 340)).toBe(true); expect(t.length).toBeGreaterThan(3);
+  });
+  it('traduce con m2m100 y devuelve null sin binding o idioma desconocido', async () => {
+    const calls: any[] = [];
+    const env: any = { AI: { run: async (m: string, i: any) => { calls.push([m, i]); return { translated_text: 'TRADUCIDO: ' + i.text.slice(0, 5) }; } } };
+    const r = await translateToSpanish(env, 'Hello world\n\nSecond paragraph', 'en');
+    expect(r).toMatch(/^TRADUCIDO/); expect(calls[0][0]).toBe('@cf/meta/m2m100-1.2b'); expect(calls[0][1]).toMatchObject({ source_lang: 'english', target_lang: 'spanish' });
+    expect(await translateToSpanish({} as any, 'Hello', 'en')).toBeNull();
+    expect(await translateToSpanish(env, 'Hello', 'other')).toBeNull();
+    expect(await translateToSpanish({ AI: { run: async () => { throw new Error('x'); } } } as any, 'Hello', 'en')).toBeNull();
+  });
+  it('sin clave externa usa Workers AI; con clave, Anthropic tiene prioridad', async () => {
+    const env: any = { AI: { run: async () => ({ response: '{"ok":true}' }) } };
+    const llm = getLlm(env)!; expect(llm.provider).toBe('workers-ai');
+    expect((await llm.complete('s', 'u')).text).toContain('ok');
+    expect(getLlm({ ...env, AI_API_KEY: 'k', AI_PROVIDER: 'anthropic' })!.provider).toBe('anthropic');
+    expect(getLlm({} as any)).toBeNull();
+  });
+  it('detecta idiomas adicionales', () => {
+    expect(detectLang('Il nuovo veliero è stato progettato per la famiglia e per le lunghe navigazioni con gli amici')).toBe('it');
+    expect(detectLang('De nieuwe zeilboot is ontworpen voor het hele gezin en voor lange reizen met vrienden op zee')).toBe('nl');
+  });
+});
+
+describe('conector YouTube (API oficial)', () => {
+  const account: any = { url: 'https://www.youtube.com/channel/UCD32lcECDXD-Mz9rgvM03kg' };
+  it('sin clave queda en espera', async () => {
+    const r = await youtubeConnector.fetchItems(account, {}, { env: {}, robots: new Map(), maxItems: 3, isKnownUrl: () => false, maxAgeDays: 45 } as any);
+    expect(r.status).toBe('needs_credentials');
+  });
+  it('lee la lista uploads y arma videos', async () => {
+    const f = vi.fn(async (u: string) => new Response(JSON.stringify({ items: [{ snippet: { title: 'Nuevo Oceanis', description: 'desc', publishedAt: new Date().toISOString(), thumbnails: { high: { url: 'https://i.ytimg.com/a.jpg' } } }, contentDetails: { videoId: 'abc123' } }] }), { status: 200 }));
+    vi.stubGlobal('fetch', f);
+    const r = await youtubeConnector.fetchItems(account, {}, { env: { YOUTUBE_API_KEY: 'k' }, robots: new Map(), maxItems: 3, isKnownUrl: () => false, maxAgeDays: 45 } as any);
+    vi.unstubAllGlobals();
+    expect(String(f.mock.calls[0][0])).toContain('playlistId=UUD32lcECDXD-Mz9rgvM03kg');
+    expect(r.items[0]).toMatchObject({ url: 'https://www.youtube.com/watch?v=abc123', mediaType: 'video', mediaUrl: 'https://i.ytimg.com/a.jpg' });
   });
 });

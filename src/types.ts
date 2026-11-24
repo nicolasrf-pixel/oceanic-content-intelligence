@@ -10,6 +10,9 @@ export interface Env {
   AI_BASE_URL?: string;
   META_ACCESS_TOKEN?: string;
   META_IG_USER_ID?: string;
+  YOUTUBE_API_KEY?: string;
+  AI?: Ai;                      // Workers AI (sin clave externa)
+  WORKERS_AI_MODEL?: string;
   ENVIRONMENT?: string;
 }
 
@@ -41,7 +44,7 @@ export interface PubRow {
   content_hash: string; title: string | null; original_text: string; original_lang: string | null;
   media_type: string; media_url: string | null; media_r2_key: string | null; media_rights: string;
   published_at: string | null; detected_at: string; status: string; category: string | null;
-  score: number | null; priority: string | null; discard_reason: string | null; updated_at: string;
+  score: number | null; priority: string | null; discard_reason: string | null; updated_at: string; original_es?: string | null;
 }
 
 export interface RawItem {
@@ -66,4 +69,6 @@ export interface AccountConfig {
   linkPattern?: string;
   allowedHosts?: string[];
   maxItems?: number;
+  viaReader?: boolean;     // leer lista y artículos mediante el lector público
+  channelId?: string;      // youtube_api
 }
